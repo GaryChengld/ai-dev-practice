@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: ai-practice-backend
+  config:
+    import: optional:file:.env[.properties]
+  ai:
+    model:
+      chat: google-genai
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          options:
+            model: ${GEMINI_MODEL:gemini-3-flash-preview}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+ai:
+  provider:
+    model: ${GEMINI_MODEL:gemini-3-flash-preview}
