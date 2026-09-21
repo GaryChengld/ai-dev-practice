@@ -1,8 +1,15 @@
 package com.example.aipractice.client;
 
+import com.example.aipractice.config.AiProviderProperties;
 import com.example.aipractice.exception.AiProviderException;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * Gemini-backed implementation of {@link AiClient} using Spring AI's
@@ -12,14 +19,17 @@ import org.springframework.stereotype.Component;
 public class GeminiAiClient implements AiClient {
 
     private final ChatModel chatModel;
+    private final AiProviderProperties properties;
 
     /**
      * Creates a Gemini client backed by the auto-configured Spring AI model.
      *
      * @param chatModel Spring AI model used to submit chat requests
+     * @param properties provider configuration containing the system prompt
      */
-    public GeminiAiClient(ChatModel chatModel) {
+    public GeminiAiClient(ChatModel chatModel, AiProviderProperties properties) {
         this.chatModel = chatModel;
+        this.properties = properties;
     }
 
     /**
@@ -32,7 +42,15 @@ public class GeminiAiClient implements AiClient {
     @Override
     public String chat(String message) {
         try {
-            String response = chatModel.call(message);
+            Prompt prompt = new Prompt(List.of(
+                    new SystemMessage(properties.systemPrompt()),
+                    new UserMessage(message)
+            ));
+            ChatResponse chatResponse = chatModel.call(prompt);
+            String response = chatResponse == null || chatResponse.getResult() == null
+                    ? null
+                    : chatResponse.getResult().getOutput().getText();
+
             if (response == null || response.isBlank()) {
                 throw new AiProviderException("Gemini returned no text content");
             }

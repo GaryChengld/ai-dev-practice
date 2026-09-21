@@ -37,7 +37,8 @@ $env:GEMINI_API_KEY = "your-key"
 mvn spring-boot:run
 ```
 
-The optional `GEMINI_MODEL` environment variable overrides the default model.
+The optional `GEMINI_MODEL` and `AI_PROVIDER_SYSTEM_PROMPT` environment
+variables override the defaults in `application.yml`.
 Local `.env` files are ignored by Git and imported by this application through
 Spring Boot's optional configuration import.
 

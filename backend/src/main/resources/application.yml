@@ -19,3 +19,7 @@ server:
 ai:
   provider:
     model: ${GEMINI_MODEL:gemini-3-flash-preview}
+    system-prompt: |-
+      You are a concise Java programming assistant.
+      Answer in no more than 3 sentences.
+      Prefer Java examples when relevant.
