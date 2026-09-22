@@ -1,14 +1,15 @@
-package com.example.aipractice.client;
+package com.example.aipractice.service;
 
-import com.example.aipractice.config.AiProviderProperties;
+import com.example.aipractice.config.AiPromptProperties;
+import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 
@@ -21,23 +22,27 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class GeminiAiClientTests {
+class AiChatServiceTests {
 
-    private static final String SYSTEM_PROMPT = "You are a helpful assistant.";
+    private static final String CHAT_PROMPT = "You are a helpful assistant.";
 
     private final ChatModel chatModel = mock(ChatModel.class);
-    private final AiProviderProperties properties = new AiProviderProperties(
-            "gemini-3-flash-preview",
-            SYSTEM_PROMPT
+    private final AiPromptProperties prompts = new AiPromptProperties(
+            CHAT_PROMPT,
+            "Analyze the ticket."
     );
-    private final GeminiAiClient client = new GeminiAiClient(chatModel, properties);
+    private final AiChatService service = new AiChatService(
+            ChatClient.create(chatModel),
+            prompts
+    );
 
     @Test
-    void sendsSystemAndUserMessagesAndReturnsGeneratedText() {
-        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("Hello from Gemini"));
+    void sendsChatPromptAndReturnsGeneratedText() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Hello from AI"));
 
-        assertThat(client.chat("Hello")).isEqualTo("Hello from Gemini");
+        ChatResponse response = service.chat("Hello");
 
+        assertThat(response.message()).isEqualTo("Hello from AI");
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(promptCaptor.capture());
         assertThat(promptCaptor.getValue().getInstructions())
@@ -45,7 +50,7 @@ class GeminiAiClientTests {
                 .satisfiesExactly(
                         instruction -> {
                             assertThat(instruction).isInstanceOf(SystemMessage.class);
-                            assertThat(instruction.getText()).isEqualTo(SYSTEM_PROMPT);
+                            assertThat(instruction.getText()).isEqualTo(CHAT_PROMPT);
                         },
                         instruction -> {
                             assertThat(instruction).isInstanceOf(UserMessage.class);
@@ -56,11 +61,11 @@ class GeminiAiClientTests {
 
     @Test
     void rejectsAnEmptyModelResponse() {
-        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse(""));
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse(""));
 
-        assertThatThrownBy(() -> client.chat("Hello"))
+        assertThatThrownBy(() -> service.chat("Hello"))
                 .isInstanceOf(AiProviderException.class)
-                .hasMessage("Gemini returned no text content");
+                .hasMessage("AI provider returned no chat content");
     }
 
     @Test
@@ -68,13 +73,15 @@ class GeminiAiClientTests {
         when(chatModel.call(any(Prompt.class)))
                 .thenThrow(new IllegalStateException("Provider failed"));
 
-        assertThatThrownBy(() -> client.chat("Hello"))
+        assertThatThrownBy(() -> service.chat("Hello"))
                 .isInstanceOf(AiProviderException.class)
-                .hasMessage("Gemini API request failed")
+                .hasMessage("AI chat request failed")
                 .hasCauseInstanceOf(IllegalStateException.class);
     }
 
-    private ChatResponse chatResponse(String text) {
-        return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
+    private org.springframework.ai.chat.model.ChatResponse modelResponse(String text) {
+        return new org.springframework.ai.chat.model.ChatResponse(
+                List.of(new Generation(new AssistantMessage(text)))
+        );
     }
 }

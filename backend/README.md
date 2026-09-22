@@ -1,29 +1,36 @@
 # AI Practice Backend
 
-A minimal Spring Boot REST project prepared for a future AI provider integration.
+A Spring Boot REST project for practising Spring AI integrations.
 
 ## Structure
 
 ```text
 src/main/java/com/example/aipractice/
 ├── AiPracticeApplication.java
-├── client/
-│   ├── AiClient.java
-│   └── GeminiAiClient.java
 ├── config/
-│   └── AiProviderProperties.java
+│   ├── AiConfiguration.java
+│   └── AiPromptProperties.java
 ├── controller/
-│   └── AiChatController.java
+│   ├── AiChatController.java
+│   └── AiExceptionHandler.java
+├── domain/
+│   ├── Category.java
+│   ├── Priority.java
+│   └── TicketAnalysis.java
 ├── dto/
+│   ├── ApiError.java
 │   ├── ChatRequest.java
 │   └── ChatResponse.java
+├── exception/
+│   └── AiProviderException.java
 └── service/
-    └── AiChatService.java
+    ├── AiChatService.java
+    └── TicketAnalysisService.java
 ```
 
-`GeminiAiClient` uses Spring AI's provider-neutral `ChatModel`. The Google GenAI
-starter supplies the model implementation and handles the Gemini API request and
-response mapping.
+Both services reuse one shared Spring AI `ChatClient` bean. `AiChatService`
+returns free-form text, while `TicketAnalysisService` uses structured output to
+map the model response to `TicketAnalysis`.
 
 ## Gemini credentials
 
@@ -37,10 +44,10 @@ $env:GEMINI_API_KEY = "your-key"
 mvn spring-boot:run
 ```
 
-The optional `GEMINI_MODEL` and `AI_PROVIDER_SYSTEM_PROMPT` environment
-variables override the defaults in `application.yml`.
-Local `.env` files are ignored by Git and imported by this application through
-Spring Boot's optional configuration import.
+The optional `GEMINI_MODEL`, `AI_PROMPTS_CHAT_ASSISTANT`, and
+`AI_PROMPTS_TICKET_ANALYZER` environment variables override the defaults in
+`application.yml`. Local `.env` files are ignored by Git and imported by the
+application through Spring Boot's optional configuration import.
 
 ## Run
 
@@ -50,12 +57,20 @@ Requires Java 17 or newer and Maven 3.6.3 or newer.
 mvn spring-boot:run
 ```
 
-The REST endpoint is `POST /api/ai/chat` with `Content-Type: application/json`.
+## API
 
-Example request:
+General chat:
 
 ```shell
 curl -X POST http://localhost:8080/api/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Explain dependency injection briefly."}'
+```
+
+Structured ticket analysis:
+
+```shell
+curl -X POST http://localhost:8080/api/ai/analyze-ticket \
+  -H "Content-Type: application/json" \
+  -d '{"message":"The production checkout API returns 500 errors."}'
 ```

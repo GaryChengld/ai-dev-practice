@@ -17,9 +17,14 @@ server:
   port: ${SERVER_PORT:8080}
 
 ai:
-  provider:
-    model: ${GEMINI_MODEL:gemini-3-flash-preview}
-    system-prompt: |-
+  prompts:
+    chat-assistant: |
       You are a concise Java programming assistant.
       Answer in no more than 3 sentences.
       Prefer Java examples when relevant.
+
+    ticket-analyzer: |
+      You analyze software support tickets.
+      Classify each ticket by category and priority.
+      Keep the summary concise.
+      Suggested action must be practical.

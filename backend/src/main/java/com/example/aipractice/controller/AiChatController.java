@@ -2,7 +2,9 @@ package com.example.aipractice.controller;
 
 import com.example.aipractice.dto.ChatRequest;
 import com.example.aipractice.dto.ChatResponse;
+import com.example.aipractice.domain.TicketAnalysis;
 import com.example.aipractice.service.AiChatService;
+import com.example.aipractice.service.TicketAnalysisService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,14 +20,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiChatController {
 
     private final AiChatService aiChatService;
+    private final TicketAnalysisService ticketAnalysisService;
 
     /**
      * Creates the chat controller.
      *
      * @param aiChatService service that coordinates AI chat requests
+     * @param ticketAnalysisService service that produces structured ticket analyses
      */
-    public AiChatController(AiChatService aiChatService) {
+    public AiChatController(
+            AiChatService aiChatService,
+            TicketAnalysisService ticketAnalysisService
+    ) {
         this.aiChatService = aiChatService;
+        this.ticketAnalysisService = ticketAnalysisService;
     }
 
     /**
@@ -41,5 +49,20 @@ public class AiChatController {
     )
     public ChatResponse chat(@Valid @RequestBody ChatRequest request) {
         return aiChatService.chat(request.message());
+    }
+
+    /**
+     * Analyzes a support ticket and returns a structured classification.
+     *
+     * @param request incoming support ticket message
+     * @return structured ticket analysis
+     */
+    @PostMapping(
+            value = "/analyze-ticket",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public TicketAnalysis analyzeTicket(@Valid @RequestBody ChatRequest request) {
+        return ticketAnalysisService.analyze(request.message());
     }
 }
