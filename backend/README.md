@@ -20,9 +20,11 @@ src/main/java/com/example/aipractice/
 ├── dto/
 │   ├── ApiError.java
 │   ├── ChatRequest.java
-│   └── ChatResponse.java
+│   ├── ChatResponse.java
+│   └── TicketAnalysisRequest.java
 ├── exception/
-│   └── AiProviderException.java
+│   ├── AiProviderException.java
+│   └── ConversationNotFoundException.java
 └── service/
     ├── AiChatService.java
     └── TicketAnalysisService.java
@@ -64,8 +66,20 @@ General chat:
 ```shell
 curl -X POST http://localhost:8080/api/ai/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"Explain dependency injection briefly."}'
+  -d '{"conversationId":null,"message":"Explain dependency injection briefly."}'
 ```
+
+The response includes a generated `conversationId`. Send that identifier in a
+later request to continue the conversation:
+
+```shell
+curl -X POST http://localhost:8080/api/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"conversationId":"generated-id","message":"Show me an example."}'
+```
+
+Conversation history is stored in memory and is cleared when the application
+restarts. Supplying an identifier that is not in memory returns HTTP 404.
 
 Structured ticket analysis:
 

@@ -2,6 +2,7 @@ package com.example.aipractice.controller;
 
 import com.example.aipractice.dto.ChatRequest;
 import com.example.aipractice.dto.ChatResponse;
+import com.example.aipractice.dto.TicketAnalysisRequest;
 import com.example.aipractice.domain.TicketAnalysis;
 import com.example.aipractice.service.AiChatService;
 import com.example.aipractice.service.TicketAnalysisService;
@@ -40,7 +41,7 @@ public class AiChatController {
      * Processes a validated JSON chat request.
      *
      * @param request incoming chat request
-     * @return generated response and model information
+     * @return generated response and conversation identifier
      */
     @PostMapping(
             value = "/chat",
@@ -48,7 +49,7 @@ public class AiChatController {
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ChatResponse chat(@Valid @RequestBody ChatRequest request) {
-        return aiChatService.chat(request.message());
+        return aiChatService.chat(request.conversationId(), request.message());
     }
 
     /**
@@ -62,7 +63,7 @@ public class AiChatController {
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public TicketAnalysis analyzeTicket(@Valid @RequestBody ChatRequest request) {
+    public TicketAnalysis analyzeTicket(@Valid @RequestBody TicketAnalysisRequest request) {
         return ticketAnalysisService.analyze(request.message());
     }
 }
