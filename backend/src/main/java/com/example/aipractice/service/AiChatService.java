@@ -4,6 +4,7 @@ import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.tools.TicketTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -25,6 +26,7 @@ public class AiChatService {
 
     private final ChatClient chatClient;
     private final AiPromptProperties prompts;
+    private final TicketTools ticketTools;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
 
     /**
@@ -32,10 +34,16 @@ public class AiChatService {
      *
      * @param chatClient shared Spring AI chat client
      * @param prompts named prompt configuration for AI workflows
+     * @param ticketTools ticket operations available to the AI model
      */
-    public AiChatService(ChatClient chatClient, AiPromptProperties prompts) {
+    public AiChatService(
+            ChatClient chatClient,
+            AiPromptProperties prompts,
+            TicketTools ticketTools
+    ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
+        this.ticketTools = ticketTools;
     }
 
     /**
@@ -58,6 +66,7 @@ public class AiChatService {
                         .system(prompts.chatAssistant())
                         .messages(history)
                         .user(message)
+                        .tools(ticketTools)
                         .call()
                         .content();
 

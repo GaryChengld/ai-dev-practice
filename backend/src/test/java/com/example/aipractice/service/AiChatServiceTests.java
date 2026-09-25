@@ -4,6 +4,7 @@ import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -13,6 +14,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,7 +38,8 @@ class AiChatServiceTests {
     );
     private final AiChatService service = new AiChatService(
             ChatClient.create(chatModel),
-            prompts
+            prompts,
+            new TicketTools(new TicketService())
     );
 
     @Test
@@ -50,7 +53,8 @@ class AiChatServiceTests {
                 .doesNotThrowAnyException();
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(promptCaptor.capture());
-        assertThat(promptCaptor.getValue().getInstructions())
+        Prompt sentPrompt = promptCaptor.getValue();
+        assertThat(sentPrompt.getInstructions())
                 .hasSize(2)
                 .satisfiesExactly(
                         instruction -> {
@@ -62,6 +66,12 @@ class AiChatServiceTests {
                             assertThat(instruction.getText()).isEqualTo("Hello");
                         }
                 );
+        assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
+        ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
+        assertThat(options.getToolCallbacks())
+                .singleElement()
+                .satisfies(tool -> assertThat(tool.getToolDefinition().name())
+                        .isEqualTo("getTicketStatus"));
     }
 
     @Test
