@@ -4,6 +4,7 @@ import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -36,10 +37,12 @@ class AiChatServiceTests {
             CHAT_PROMPT,
             "Analyze the ticket."
     );
+    private final TicketService ticketService = new TicketService();
     private final AiChatService service = new AiChatService(
             ChatClient.create(chatModel),
             prompts,
-            new TicketTools(new TicketService())
+            new TicketTools(ticketService),
+            new TicketPriorityTools(ticketService)
     );
 
     @Test
@@ -69,9 +72,8 @@ class AiChatServiceTests {
         assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
-                .singleElement()
-                .satisfies(tool -> assertThat(tool.getToolDefinition().name())
-                        .isEqualTo("getTicketStatus"));
+                .extracting(tool -> tool.getToolDefinition().name())
+                .containsExactlyInAnyOrder("getTicketStatus", "getTicketPriority");
     }
 
     @Test
