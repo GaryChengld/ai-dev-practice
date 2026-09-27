@@ -1,6 +1,6 @@
 package com.example.aipractice.service;
 
-import com.example.aipractice.config.AiPromptProperties;
+import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AiChatService {
 
     private final ChatClient chatClient;
-    private final AiPromptProperties prompts;
+    private final AiPrompts prompts;
     private final TicketTools ticketTools;
     private final TicketPriorityTools ticketPriorityTools;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
@@ -41,7 +41,7 @@ public class AiChatService {
      */
     public AiChatService(
             ChatClient chatClient,
-            AiPromptProperties prompts,
+            AiPrompts prompts,
             TicketTools ticketTools,
             TicketPriorityTools ticketPriorityTools
     ) {

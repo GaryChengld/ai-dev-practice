@@ -28,7 +28,8 @@ public class TicketTools {
      * @param ticketId ticket identifier, such as {@code INC-1001}
      * @return the ticket status, or {@code NOT_FOUND} when the ticket does not exist
      */
-    @Tool(description = "Get the current status of a support ticket by its ticket ID")
+    @Tool(description = "Get the current status of a support ticket by its ticket ID. "
+            + "Always call this before checking priority when deciding whether a ticket needs attention.")
     public String getTicketStatus(
             @ToolParam(description = "Support ticket ID, for example INC-1001") String ticketId
     ) {

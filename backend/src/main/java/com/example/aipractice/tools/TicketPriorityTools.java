@@ -28,7 +28,9 @@ public class TicketPriorityTools {
      * @param ticketId ticket identifier, such as {@code INC-1001}
      * @return the ticket priority, or {@code NOT_FOUND} when the ticket does not exist
      */
-    @Tool(description = "Get the current priority of a support ticket by its ticket ID")
+    @Tool(description = "Get the current priority of a support ticket by its ticket ID. "
+            + "When deciding whether a ticket needs attention, call this only after its status "
+            + "is known to be OPEN or IN_PROGRESS.")
     public String getTicketPriority(
             @ToolParam(description = "Support ticket ID, for example INC-1001") String ticketId
     ) {

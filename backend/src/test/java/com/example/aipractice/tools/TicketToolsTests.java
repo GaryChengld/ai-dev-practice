@@ -2,6 +2,7 @@ package com.example.aipractice.tools;
 
 import com.example.aipractice.service.TicketService;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.tool.annotation.Tool;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,5 +25,15 @@ class TicketToolsTests {
     @Test
     void returnsNotFoundForUnknownTickets() {
         assertThat(ticketTools.getTicketStatus("INC-1024")).isEqualTo("NOT_FOUND");
+    }
+
+    @Test
+    void tellsTheModelToCheckStatusBeforePriority() throws NoSuchMethodException {
+        Tool tool = TicketTools.class
+                .getMethod("getTicketStatus", String.class)
+                .getAnnotation(Tool.class);
+
+        assertThat(tool.description())
+                .contains("Always call this before checking priority");
     }
 }

@@ -1,6 +1,6 @@
 package com.example.aipractice.service;
 
-import com.example.aipractice.config.AiPromptProperties;
+import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
@@ -33,7 +33,7 @@ class AiChatServiceTests {
     private static final String CHAT_PROMPT = "You are a helpful assistant.";
 
     private final ChatModel chatModel = mock(ChatModel.class);
-    private final AiPromptProperties prompts = new AiPromptProperties(
+    private final AiPrompts prompts = new AiPrompts(
             CHAT_PROMPT,
             "Analyze the ticket."
     );

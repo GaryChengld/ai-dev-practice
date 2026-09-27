@@ -48,8 +48,10 @@ mvn spring-boot:run
 
 The optional `GEMINI_MODEL`, `AI_PROMPTS_CHAT_ASSISTANT`, and
 `AI_PROMPTS_TICKET_ANALYZER` environment variables override the defaults in
-`application.yml`. Local `.env` files are ignored by Git and imported by the
-application through Spring Boot's optional configuration import.
+`application.yml`. Prompt settings are Markdown filenames resolved from
+`src/main/resources/prompts`. Local `.env` files are ignored by Git and
+imported by the application through Spring Boot's optional configuration
+import.
 
 ## Run
 
@@ -80,6 +82,18 @@ curl -X POST http://localhost:8080/api/ai/chat \
 
 Conversation history is stored in memory and is cleared when the application
 restarts. Supplying an identifier that is not in memory returns HTTP 404.
+
+For ticket-attention questions, the assistant checks the ticket status first.
+It checks priority only for `OPEN` or `IN_PROGRESS` tickets; it does not check
+priority for `RESOLVED`, missing, or unrecognized statuses. `CRITICAL` and
+`HIGH` priorities need attention, `MEDIUM` should be monitored but is not
+urgent, and `LOW` generally does not need immediate attention.
+
+```shell
+curl -X POST http://localhost:8080/api/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"conversationId":null,"message":"Does INC-1002 need attention?"}'
+```
 
 Structured ticket analysis:
 

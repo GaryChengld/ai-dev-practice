@@ -1,6 +1,6 @@
 package com.example.aipractice.service;
 
-import com.example.aipractice.config.AiPromptProperties;
+import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.domain.TicketAnalysis;
 import com.example.aipractice.exception.AiProviderException;
 import org.springframework.ai.chat.client.ChatClient;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 public class TicketAnalysisService {
 
     private final ChatClient chatClient;
-    private final AiPromptProperties prompts;
+    private final AiPrompts prompts;
 
     /**
      * Creates the ticket analysis service.
@@ -21,7 +21,7 @@ public class TicketAnalysisService {
      * @param chatClient shared Spring AI chat client
      * @param prompts named prompt configuration for AI workflows
      */
-    public TicketAnalysisService(ChatClient chatClient, AiPromptProperties prompts) {
+    public TicketAnalysisService(ChatClient chatClient, AiPrompts prompts) {
         this.chatClient = chatClient;
         this.prompts = prompts;
     }

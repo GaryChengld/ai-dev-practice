@@ -3,10 +3,10 @@ package com.example.aipractice.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Named system prompts available to AI-backed application workflows.
+ * Names of Markdown resources containing prompts for AI workflows.
  *
- * @param chatAssistant system instruction for general chat requests
- * @param ticketAnalyzer system instruction for support-ticket analysis
+ * @param chatAssistant Markdown filename for the general chat prompt
+ * @param ticketAnalyzer Markdown filename for the ticket-analysis prompt
  */
 @ConfigurationProperties(prefix = "ai.prompts")
 public record AiPromptProperties(

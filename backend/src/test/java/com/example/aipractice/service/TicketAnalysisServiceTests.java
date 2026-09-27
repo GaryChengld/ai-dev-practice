@@ -1,6 +1,6 @@
 package com.example.aipractice.service;
 
-import com.example.aipractice.config.AiPromptProperties;
+import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.domain.Category;
 import com.example.aipractice.domain.Priority;
 import com.example.aipractice.domain.TicketAnalysis;
@@ -30,7 +30,7 @@ class TicketAnalysisServiceTests {
             "Our production checkout API returns 500 errors.";
 
     private final ChatModel chatModel = mock(ChatModel.class);
-    private final AiPromptProperties prompts = new AiPromptProperties(
+    private final AiPrompts prompts = new AiPrompts(
             "Assist with Java questions.",
             TICKET_PROMPT
     );
