@@ -2,6 +2,7 @@ package com.example.aipractice;
 
 import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
+import com.example.aipractice.service.KnowledgeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,9 @@ class AiPracticeApplicationTests {
 
     @Autowired
     private AiPrompts promptContent;
+
+    @Autowired
+    private KnowledgeService knowledgeService;
 
     @Test
     void contextLoads() {
@@ -39,5 +43,14 @@ class AiPracticeApplicationTests {
                 );
         assertThat(promptContent.ticketAnalyzer())
                 .contains("You analyze software support tickets.");
+        assertThat(normalizedPrompt)
+                .contains("call getTicketSlaPolicy", "answer from the retrieved policy");
+        assertThat(knowledgeService.getTicketSlaPolicy())
+                .contains(
+                        "CRITICAL tickets require a response within 1 hour.",
+                        "HIGH priority tickets require a response within 4 hours.",
+                        "MEDIUM priority tickets require a response within 1 business day.",
+                        "LOW priority tickets require a response within 3 business days."
+                );
     }
 }

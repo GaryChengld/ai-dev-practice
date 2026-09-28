@@ -4,6 +4,7 @@ import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.tools.KnowledgeTools;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.springframework.ai.chat.client.ChatClient;
@@ -29,6 +30,7 @@ public class AiChatService {
     private final AiPrompts prompts;
     private final TicketTools ticketTools;
     private final TicketPriorityTools ticketPriorityTools;
+    private final KnowledgeTools knowledgeTools;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
 
     /**
@@ -38,17 +40,20 @@ public class AiChatService {
      * @param prompts named prompt configuration for AI workflows
      * @param ticketTools ticket operations available to the AI model
      * @param ticketPriorityTools ticket priority operations available to the AI model
+     * @param knowledgeTools application knowledge available to the AI model
      */
     public AiChatService(
             ChatClient chatClient,
             AiPrompts prompts,
             TicketTools ticketTools,
-            TicketPriorityTools ticketPriorityTools
+            TicketPriorityTools ticketPriorityTools,
+            KnowledgeTools knowledgeTools
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
         this.ticketTools = ticketTools;
         this.ticketPriorityTools = ticketPriorityTools;
+        this.knowledgeTools = knowledgeTools;
     }
 
     /**
@@ -71,7 +76,7 @@ public class AiChatService {
                         .system(prompts.chatAssistant())
                         .messages(history)
                         .user(message)
-                        .tools(ticketTools, ticketPriorityTools)
+                        .tools(ticketTools, ticketPriorityTools, knowledgeTools)
                         .call()
                         .content();
 

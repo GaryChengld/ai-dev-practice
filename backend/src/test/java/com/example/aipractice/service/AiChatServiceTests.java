@@ -4,6 +4,7 @@ import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.tools.KnowledgeTools;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,8 @@ class AiChatServiceTests {
             ChatClient.create(chatModel),
             prompts,
             new TicketTools(ticketService),
-            new TicketPriorityTools(ticketService)
+            new TicketPriorityTools(ticketService),
+            new KnowledgeTools(new KnowledgeService())
     );
 
     @Test
@@ -73,7 +75,11 @@ class AiChatServiceTests {
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
                 .extracting(tool -> tool.getToolDefinition().name())
-                .containsExactlyInAnyOrder("getTicketStatus", "getTicketPriority");
+                .containsExactlyInAnyOrder(
+                        "getTicketStatus",
+                        "getTicketPriority",
+                        "getTicketSlaPolicy"
+                );
     }
 
     @Test

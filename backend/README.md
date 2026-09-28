@@ -89,6 +89,13 @@ priority for `RESOLVED`, missing, or unrecognized statuses. `CRITICAL` and
 `HIGH` priorities need attention, `MEDIUM` should be monitored but is not
 urgent, and `LOW` generally does not need immediate attention.
 
+The assistant can also retrieve the support ticket SLA policy from
+`src/main/resources/knowledge/ticket-sla.md`. This keeps application knowledge
+outside the model and lets it answer questions such as "What is our SLA for a
+HIGH-priority ticket?" The chat flow can combine this knowledge tool with the
+ticket tools to explain both a ticket's current state and its required response
+time.
+
 ```shell
 curl -X POST http://localhost:8080/api/ai/chat \
   -H "Content-Type: application/json" \

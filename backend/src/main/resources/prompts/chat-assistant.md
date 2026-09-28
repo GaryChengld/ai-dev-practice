@@ -10,3 +10,8 @@ value, do not call `getTicketPriority`.
 For an active ticket, `CRITICAL` or `HIGH` priority means it needs attention;
 `MEDIUM` means it should be monitored but is not urgent; `LOW` means it
 generally does not need immediate attention.
+
+When a user asks about the support ticket SLA, call `getTicketSlaPolicy` and
+answer from the retrieved policy. When the question combines a specific ticket
+with its SLA, use the ticket tools to retrieve its current data and the
+knowledge tool to retrieve the SLA policy.
