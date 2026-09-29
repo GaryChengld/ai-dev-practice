@@ -2,14 +2,18 @@ package com.example.aipractice;
 
 import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
-import com.example.aipractice.service.KnowledgeService;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(properties = "spring.ai.google.genai.api-key=test-api-key")
+@SpringBootTest(properties = {
+        "spring.ai.google.genai.api-key=test-api-key",
+        "spring.ai.google.genai.embedding.api-key=test-api-key"
+})
 class AiPracticeApplicationTests {
 
     @Autowired
@@ -19,10 +23,15 @@ class AiPracticeApplicationTests {
     private AiPrompts promptContent;
 
     @Autowired
-    private KnowledgeService knowledgeService;
+    private VectorStore vectorStore;
+
+    @Autowired
+    private EmbeddingModel embeddingModel;
 
     @Test
     void contextLoads() {
+        assertThat(embeddingModel).isNotNull();
+        assertThat(vectorStore).isNotNull();
     }
 
     @Test
@@ -34,6 +43,8 @@ class AiPracticeApplicationTests {
 
         assertThat(normalizedPrompt)
                 .contains(
+                        "concise customer support assistant",
+                        "Do not add programming examples",
                         "always call getTicketStatus first",
                         "status is OPEN or IN_PROGRESS",
                         "do not call getTicketPriority",
@@ -44,13 +55,9 @@ class AiPracticeApplicationTests {
         assertThat(promptContent.ticketAnalyzer())
                 .contains("You analyze software support tickets.");
         assertThat(normalizedPrompt)
-                .contains("call getTicketSlaPolicy", "answer from the retrieved policy");
-        assertThat(knowledgeService.getTicketSlaPolicy())
                 .contains(
-                        "CRITICAL tickets require a response within 1 hour.",
-                        "HIGH priority tickets require a response within 4 hours.",
-                        "MEDIUM priority tickets require a response within 1 business day.",
-                        "LOW priority tickets require a response within 3 business days."
+                        "knowledge-context block before the user's question",
+                        "do not invent company policies"
                 );
     }
 }

@@ -4,13 +4,13 @@ import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
-import com.example.aipractice.tools.KnowledgeTools;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,7 +30,7 @@ public class AiChatService {
     private final AiPrompts prompts;
     private final TicketTools ticketTools;
     private final TicketPriorityTools ticketPriorityTools;
-    private final KnowledgeTools knowledgeTools;
+    private final KnowledgeService knowledgeService;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
 
     /**
@@ -40,20 +40,20 @@ public class AiChatService {
      * @param prompts named prompt configuration for AI workflows
      * @param ticketTools ticket operations available to the AI model
      * @param ticketPriorityTools ticket priority operations available to the AI model
-     * @param knowledgeTools application knowledge available to the AI model
+     * @param knowledgeService service that retrieves relevant application knowledge
      */
     public AiChatService(
             ChatClient chatClient,
             AiPrompts prompts,
             TicketTools ticketTools,
             TicketPriorityTools ticketPriorityTools,
-            KnowledgeTools knowledgeTools
+            KnowledgeService knowledgeService
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
         this.ticketTools = ticketTools;
         this.ticketPriorityTools = ticketPriorityTools;
-        this.knowledgeTools = knowledgeTools;
+        this.knowledgeService = knowledgeService;
     }
 
     /**
@@ -72,11 +72,13 @@ public class AiChatService {
         synchronized (history) {
             try {
                 UserMessage userMessage = new UserMessage(message);
+                List<Document> relevantKnowledge = knowledgeService.search(message);
+                String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
                         .system(prompts.chatAssistant())
                         .messages(history)
-                        .user(message)
-                        .tools(ticketTools, ticketPriorityTools, knowledgeTools)
+                        .user(augmentedMessage)
+                        .tools(ticketTools, ticketPriorityTools)
                         .call()
                         .content();
 
@@ -93,6 +95,29 @@ public class AiChatService {
                 throw new AiProviderException("AI chat request failed", exception);
             }
         }
+    }
+
+    private String addKnowledgeContext(String message, List<Document> relevantKnowledge) {
+        if (relevantKnowledge.isEmpty()) {
+            return message;
+        }
+
+        String context = relevantKnowledge.stream()
+                .map(Document::getText)
+                .reduce((left, right) -> left + "\n\n---\n\n" + right)
+                .orElse("");
+
+        return """
+                Use the retrieved company knowledge below when it is relevant to the question.
+                If the context does not answer the question, do not invent a company policy.
+
+                <knowledge-context>
+                %s
+                </knowledge-context>
+
+                User question:
+                %s
+                """.formatted(context, message);
     }
 
     /**

@@ -4,7 +4,6 @@ import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
-import com.example.aipractice.tools.KnowledgeTools;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
@@ -16,6 +15,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 import java.util.List;
@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,19 +40,30 @@ class AiChatServiceTests {
             "Analyze the ticket."
     );
     private final TicketService ticketService = new TicketService();
+    private final KnowledgeService knowledgeService = mock(KnowledgeService.class);
     private final AiChatService service = new AiChatService(
             ChatClient.create(chatModel),
             prompts,
             new TicketTools(ticketService),
             new TicketPriorityTools(ticketService),
-            new KnowledgeTools(new KnowledgeService())
+            knowledgeService
     );
 
+    AiChatServiceTests() {
+        when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
+        when(knowledgeService.search(anyString())).thenReturn(List.of());
+    }
+
     @Test
-    void sendsChatPromptAndReturnsGeneratedText() {
+    void retrievesKnowledgeAndAddsItToThePromptBeforeCallingTheModel() {
+        when(knowledgeService.search("How long do refunds take?"))
+                .thenReturn(List.of(
+                        new Document("# Refund Policy\n\nApproved refunds take 3-5 business days."),
+                        new Document("Customers may request a refund within 30 days.")
+                ));
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Hello from AI"));
 
-        ChatResponse response = service.chat(null, "Hello");
+        ChatResponse response = service.chat(null, "How long do refunds take?");
 
         assertThat(response.message()).isEqualTo("Hello from AI");
         assertThatCode(() -> UUID.fromString(response.conversationId()))
@@ -68,17 +80,24 @@ class AiChatServiceTests {
                         },
                         instruction -> {
                             assertThat(instruction).isInstanceOf(UserMessage.class);
-                            assertThat(instruction.getText()).isEqualTo("Hello");
+                            assertThat(instruction.getText())
+                                    .contains(
+                                            "<knowledge-context>",
+                                            "# Refund Policy",
+                                            "Approved refunds take 3-5 business days.",
+                                            "Customers may request a refund within 30 days.",
+                                            "User question:\nHow long do refunds take?"
+                                    );
                         }
                 );
+        verify(knowledgeService).search("How long do refunds take?");
         assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
                 .extracting(tool -> tool.getToolDefinition().name())
                 .containsExactlyInAnyOrder(
                         "getTicketStatus",
-                        "getTicketPriority",
-                        "getTicketSlaPolicy"
+                        "getTicketPriority"
                 );
     }
 

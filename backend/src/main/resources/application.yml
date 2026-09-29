@@ -9,6 +9,8 @@ spring:
     google:
       genai:
         api-key: ${GEMINI_API_KEY:}
+        embedding:
+          api-key: ${GEMINI_API_KEY:}
         chat:
           options:
             model: ${GEMINI_MODEL:gemini-3-flash-preview}

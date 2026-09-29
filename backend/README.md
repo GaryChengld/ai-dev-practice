@@ -89,12 +89,16 @@ priority for `RESOLVED`, missing, or unrecognized statuses. `CRITICAL` and
 `HIGH` priorities need attention, `MEDIUM` should be monitored but is not
 urgent, and `LOW` generally does not need immediate attention.
 
-The assistant can also retrieve the support ticket SLA policy from
-`src/main/resources/knowledge/ticket-sla.md`. This keeps application knowledge
-outside the model and lets it answer questions such as "What is our SLA for a
-HIGH-priority ticket?" The chat flow can combine this knowledge tool with the
-ticket tools to explain both a ticket's current state and its required response
-time.
+The assistant can search the Markdown knowledge base in
+`src/main/resources/knowledge`. It currently contains ticket SLA, refund, and
+password policies. On the first knowledge query, the files are loaded, split
+into chunks, embedded, and added to an in-memory Spring AI vector store. Each
+chat request searches for the three most similar chunks before calling the
+model and adds them directly to the prompt as context. The model does not need
+to choose or call a knowledge tool. It can still use ticket tools for live data,
+allowing a response to combine a ticket's current state with its required
+response time. Any Markdown file added directly under the `knowledge` directory
+is discovered automatically; no Java filename list needs to be updated.
 
 ```shell
 curl -X POST http://localhost:8080/api/ai/chat \

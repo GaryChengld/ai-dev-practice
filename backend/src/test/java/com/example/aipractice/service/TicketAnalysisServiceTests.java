@@ -13,6 +13,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.List;
@@ -38,6 +39,10 @@ class TicketAnalysisServiceTests {
             ChatClient.create(chatModel),
             prompts
     );
+
+    TicketAnalysisServiceTests() {
+        when(chatModel.getOptions()).thenReturn(ChatOptions.builder().build());
+    }
 
     @Test
     void convertsStructuredModelOutputToTicketAnalysis() {
