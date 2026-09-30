@@ -55,7 +55,7 @@ class KnowledgeServiceTests {
     }
 
     @Test
-    void searchesForTheTopThreeChunks() {
+    void searchesForTheTopThreeRelevantChunks() {
         var requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
 
         knowledgeService.search("refund timing");
@@ -63,6 +63,7 @@ class KnowledgeServiceTests {
         verify(vectorStore).similaritySearch(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getQuery()).isEqualTo("refund timing");
         assertThat(requestCaptor.getValue().getTopK()).isEqualTo(3);
+        assertThat(requestCaptor.getValue().getSimilarityThreshold()).isEqualTo(0.7);
     }
 
     @Test

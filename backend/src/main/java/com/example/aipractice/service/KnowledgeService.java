@@ -25,6 +25,7 @@ public class KnowledgeService {
 
     private static final String KNOWLEDGE_RESOURCE_PATTERN = "classpath*:knowledge/*.md";
     private static final int TOP_K = 3;
+    private static final double SIMILARITY_THRESHOLD = 0.7;
 
     private final VectorStore vectorStore;
     private final ResourcePatternResolver resourceResolver =
@@ -60,6 +61,7 @@ public class KnowledgeService {
         return vectorStore.similaritySearch(SearchRequest.builder()
                 .query(query)
                 .topK(TOP_K)
+                .similarityThreshold(SIMILARITY_THRESHOLD)
                 .build());
     }
 
