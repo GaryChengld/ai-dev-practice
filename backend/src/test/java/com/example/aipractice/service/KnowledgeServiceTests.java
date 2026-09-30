@@ -45,7 +45,7 @@ class KnowledgeServiceTests {
                 .anySatisfy(text -> assertThat(text)
                         .contains("Passwords must contain at least 12 characters."));
         assertThat(documentsCaptor.getValue())
-                .extracting(document -> document.getMetadata().get("source"))
+                .extracting(document -> document.getMetadata().get(KnowledgeMetadata.SOURCE))
                 .contains(
                         "ticket-sla.md",
                         "refund-policy.md",

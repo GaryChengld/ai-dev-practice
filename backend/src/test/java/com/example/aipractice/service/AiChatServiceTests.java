@@ -19,6 +19,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,14 +59,25 @@ class AiChatServiceTests {
     void retrievesKnowledgeAndAddsItToThePromptBeforeCallingTheModel() {
         when(knowledgeService.search("How long do refunds take?"))
                 .thenReturn(List.of(
-                        new Document("# Refund Policy\n\nApproved refunds take 3-5 business days."),
-                        new Document("Customers may request a refund within 30 days.")
+                        new Document(
+                                "# Refund Policy\n\nApproved refunds take 3-5 business days.",
+                                Map.of(KnowledgeMetadata.SOURCE, "refund-policy.md")
+                        ),
+                        new Document(
+                                "Customers may request a refund within 30 days.",
+                                Map.of(KnowledgeMetadata.SOURCE, "refund-policy.md")
+                        ),
+                        new Document(
+                                "Unrelated metadata must not appear as a source.",
+                                Map.of("category", "billing")
+                        )
                 ));
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Hello from AI"));
 
         ChatResponse response = service.chat(null, "How long do refunds take?");
 
         assertThat(response.message()).isEqualTo("Hello from AI");
+        assertThat(response.sources()).containsExactly("refund-policy.md");
         assertThatCode(() -> UUID.fromString(response.conversationId()))
                 .doesNotThrowAnyException();
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
@@ -115,6 +127,7 @@ class AiChatServiceTests {
 
         assertThat(secondResponse.conversationId()).isEqualTo(firstResponse.conversationId());
         assertThat(secondResponse.message()).isEqualTo("Second answer");
+        assertThat(secondResponse.sources()).isEmpty();
 
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel, org.mockito.Mockito.times(2)).call(promptCaptor.capture());

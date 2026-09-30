@@ -83,7 +83,7 @@ public class KnowledgeService {
             for (Resource resource : resources) {
                 documents.add(new Document(
                         resource.getContentAsString(StandardCharsets.UTF_8),
-                        Map.of("source", resource.getFilename())
+                        Map.of(KnowledgeMetadata.SOURCE, resource.getFilename())
                 ));
             }
         } catch (IOException exception) {

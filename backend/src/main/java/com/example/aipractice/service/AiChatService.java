@@ -61,7 +61,7 @@ public class AiChatService {
      *
      * @param conversationId existing conversation identifier, or {@code null} or blank to start one
      * @param message user message to process
-     * @return chat response containing the conversation identifier and generated text
+     * @return chat response containing the conversation identifier, generated text, and sources
      * @throws ConversationNotFoundException if a supplied conversation identifier is unknown
      * @throws AiProviderException if the model call returns no content or fails
      */
@@ -88,13 +88,27 @@ public class AiChatService {
 
                 history.add(userMessage);
                 history.add(new AssistantMessage(response));
-                return new ChatResponse(resolvedConversationId, response);
+                return new ChatResponse(
+                        resolvedConversationId,
+                        response,
+                        extractSources(relevantKnowledge)
+                );
             } catch (AiProviderException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 throw new AiProviderException("AI chat request failed", exception);
             }
         }
+    }
+
+    private List<String> extractSources(List<Document> documents) {
+        return documents.stream()
+                .map(document -> document.getMetadata().get(KnowledgeMetadata.SOURCE))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(source -> !source.isBlank())
+                .distinct()
+                .toList();
     }
 
     private String addKnowledgeContext(String message, List<Document> relevantKnowledge) {
