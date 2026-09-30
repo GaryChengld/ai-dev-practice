@@ -5,6 +5,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 
 import java.util.List;
 
@@ -29,9 +30,9 @@ class KnowledgeServiceTests {
         ));
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(results);
 
-        assertThat(knowledgeService.search("What is the SLA for a HIGH ticket?"))
+        assertThat(knowledgeService.search("What is the SLA for a HIGH ticket?", null))
                 .isEqualTo(results);
-        knowledgeService.search("How quickly should HIGH tickets receive a response?");
+        knowledgeService.search("How quickly should HIGH tickets receive a response?", null);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Document>> documentsCaptor = ArgumentCaptor.forClass(List.class);
@@ -51,6 +52,16 @@ class KnowledgeServiceTests {
                         "refund-policy.md",
                         "password-policy.md"
                 );
+        assertThat(documentsCaptor.getValue())
+                .anySatisfy(document -> assertThat(document.getMetadata())
+                        .containsEntry(KnowledgeMetadata.SOURCE, "ticket-sla.md")
+                        .containsEntry(KnowledgeMetadata.CATEGORY, KnowledgeMetadata.TICKET_CATEGORY))
+                .anySatisfy(document -> assertThat(document.getMetadata())
+                        .containsEntry(KnowledgeMetadata.SOURCE, "refund-policy.md")
+                        .containsEntry(KnowledgeMetadata.CATEGORY, KnowledgeMetadata.REFUND_CATEGORY))
+                .anySatisfy(document -> assertThat(document.getMetadata())
+                        .containsEntry(KnowledgeMetadata.SOURCE, "password-policy.md")
+                        .containsEntry(KnowledgeMetadata.CATEGORY, KnowledgeMetadata.SECURITY_CATEGORY));
         verify(vectorStore, times(2)).similaritySearch(any(SearchRequest.class));
     }
 
@@ -58,17 +69,42 @@ class KnowledgeServiceTests {
     void searchesForTheTopThreeRelevantChunks() {
         var requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
 
-        knowledgeService.search("refund timing");
+        knowledgeService.search("refund timing", null);
 
         verify(vectorStore).similaritySearch(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getQuery()).isEqualTo("refund timing");
         assertThat(requestCaptor.getValue().getTopK()).isEqualTo(3);
         assertThat(requestCaptor.getValue().getSimilarityThreshold()).isEqualTo(0.7);
+        assertThat(requestCaptor.getValue().hasFilterExpression()).isFalse();
+    }
+
+    @Test
+    void filtersSearchByCategoryWhenProvided() {
+        var requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+
+        knowledgeService.search("How long do I have to request a refund?", "  refund  ");
+
+        verify(vectorStore).similaritySearch(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getFilterExpression()).isEqualTo(
+                new FilterExpressionBuilder()
+                        .eq(KnowledgeMetadata.CATEGORY, KnowledgeMetadata.REFUND_CATEGORY)
+                        .build()
+        );
+    }
+
+    @Test
+    void treatsBlankCategoryAsAnUnfilteredSearch() {
+        var requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+
+        knowledgeService.search("general company question", "  ");
+
+        verify(vectorStore).similaritySearch(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().hasFilterExpression()).isFalse();
     }
 
     @Test
     void rejectsBlankQueriesBeforeLoadingKnowledge() {
-        assertThatThrownBy(() -> knowledgeService.search("  "))
+        assertThatThrownBy(() -> knowledgeService.search("  ", "refund"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Knowledge search query must not be blank");
 
