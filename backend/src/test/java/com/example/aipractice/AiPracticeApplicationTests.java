@@ -38,6 +38,8 @@ class AiPracticeApplicationTests {
     void configuresConditionalTicketAttentionWorkflow() {
         assertThat(prompts.chatAssistant()).isEqualTo("chat-assistant.md");
         assertThat(prompts.ticketAnalyzer()).isEqualTo("ticket-analyzer.md");
+        assertThat(prompts.knowledgeCategoryRouter())
+                .isEqualTo("knowledge-category-router.md");
 
         String normalizedPrompt = promptContent.chatAssistant().replaceAll("[`\\s]+", " ");
 
@@ -54,6 +56,8 @@ class AiPracticeApplicationTests {
                 );
         assertThat(promptContent.ticketAnalyzer())
                 .contains("You analyze software support tickets.");
+        assertThat(promptContent.knowledgeCategoryRouter())
+                .contains("ticket", "refund", "security", "none");
         assertThat(normalizedPrompt)
                 .contains(
                         "knowledge-context block before the user's question",

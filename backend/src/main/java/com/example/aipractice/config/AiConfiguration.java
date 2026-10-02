@@ -49,7 +49,8 @@ public class AiConfiguration {
     public AiPrompts aiPrompts(AiPromptProperties properties) {
         return new AiPrompts(
                 loadPrompt(properties.chatAssistant()),
-                loadPrompt(properties.ticketAnalyzer())
+                loadPrompt(properties.ticketAnalyzer()),
+                loadPrompt(properties.knowledgeCategoryRouter())
         );
     }
 

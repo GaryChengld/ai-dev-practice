@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,8 +72,7 @@ public class AiChatService {
         synchronized (history) {
             try {
                 UserMessage userMessage = new UserMessage(message);
-                String category = determineCategory(message);
-                List<Document> relevantKnowledge = knowledgeService.search(message, category);
+                List<Document> relevantKnowledge = knowledgeService.search(message);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
                         .system(prompts.chatAssistant())
@@ -101,20 +99,6 @@ public class AiChatService {
                 throw new AiProviderException("AI chat request failed", exception);
             }
         }
-    }
-
-    private String determineCategory(String message) {
-        String normalizedMessage = message.toLowerCase(Locale.ROOT);
-        if (normalizedMessage.contains("refund")) {
-            return KnowledgeMetadata.REFUND_CATEGORY;
-        }
-        if (normalizedMessage.contains("password")) {
-            return KnowledgeMetadata.SECURITY_CATEGORY;
-        }
-        if (normalizedMessage.contains("ticket")) {
-            return KnowledgeMetadata.TICKET_CATEGORY;
-        }
-        return null;
     }
 
     private List<String> extractSources(List<Document> documents) {

@@ -1,3 +1,6 @@
+---
+category: security
+---
 # Password Policy
 
 Passwords must contain at least 12 characters.

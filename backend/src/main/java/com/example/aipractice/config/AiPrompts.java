@@ -5,9 +5,11 @@ package com.example.aipractice.config;
  *
  * @param chatAssistant system instruction for general chat requests
  * @param ticketAnalyzer system instruction for support-ticket analysis
+ * @param knowledgeCategoryRouter system instruction for knowledge category routing
  */
 public record AiPrompts(
         String chatAssistant,
-        String ticketAnalyzer
+        String ticketAnalyzer,
+        String knowledgeCategoryRouter
 ) {
 }

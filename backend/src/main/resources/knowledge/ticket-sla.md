@@ -1,3 +1,6 @@
+---
+category: ticket
+---
 # Support Ticket SLA
 
 CRITICAL tickets require a response within 1 hour.

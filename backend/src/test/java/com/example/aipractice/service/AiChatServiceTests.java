@@ -7,8 +7,6 @@ import com.example.aipractice.exception.ConversationNotFoundException;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -29,9 +27,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,7 +38,8 @@ class AiChatServiceTests {
     private final ChatModel chatModel = mock(ChatModel.class);
     private final AiPrompts prompts = new AiPrompts(
             CHAT_PROMPT,
-            "Analyze the ticket."
+            "Analyze the ticket.",
+            "Route knowledge questions."
     );
     private final TicketService ticketService = new TicketService();
     private final KnowledgeService knowledgeService = mock(KnowledgeService.class);
@@ -57,12 +53,12 @@ class AiChatServiceTests {
 
     AiChatServiceTests() {
         when(chatModel.getOptions()).thenReturn(ToolCallingChatOptions.builder().build());
-        when(knowledgeService.search(anyString(), nullable(String.class))).thenReturn(List.of());
+        when(knowledgeService.search(anyString())).thenReturn(List.of());
     }
 
     @Test
     void retrievesKnowledgeAndAddsItToThePromptBeforeCallingTheModel() {
-        when(knowledgeService.search("How long do refunds take?", KnowledgeMetadata.REFUND_CATEGORY))
+        when(knowledgeService.search("How long do refunds take?"))
                 .thenReturn(List.of(
                         new Document(
                                 "# Refund Policy\n\nApproved refunds take 3-5 business days.",
@@ -107,10 +103,7 @@ class AiChatServiceTests {
                                     );
                         }
                 );
-        verify(knowledgeService).search(
-                "How long do refunds take?",
-                KnowledgeMetadata.REFUND_CATEGORY
-        );
+        verify(knowledgeService).search("How long do refunds take?");
         assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
@@ -121,27 +114,14 @@ class AiChatServiceTests {
                 );
     }
 
-    @ParameterizedTest
-    @CsvSource({
-            "Can I get a refund?, refund",
-            "I forgot my PASSWORD, security",
-            "What is the ticket SLA?, ticket"
-    })
-    void determinesKnowledgeCategoryFromTheMessage(String message, String expectedCategory) {
+    @Test
+    void delegatesKnowledgeRetrievalToKnowledgeService() {
+        String message = "Question requiring categorized knowledge";
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
 
         service.chat(null, message);
 
-        verify(knowledgeService).search(message, expectedCategory);
-    }
-
-    @Test
-    void usesSemanticSearchWithoutAFilterWhenNoCategoryMatches() {
-        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
-
-        service.chat(null, "What are your business hours?");
-
-        verify(knowledgeService).search(eq("What are your business hours?"), isNull());
+        verify(knowledgeService).search(message);
     }
 
     @Test

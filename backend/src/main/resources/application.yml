@@ -22,3 +22,4 @@ ai:
   prompts:
     chat-assistant: chat-assistant.md
     ticket-analyzer: ticket-analyzer.md
+    knowledge-category-router: knowledge-category-router.md
