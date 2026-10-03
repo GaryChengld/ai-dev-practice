@@ -6,6 +6,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Uses structured AI output to select a knowledge category for a message.
@@ -14,13 +15,6 @@ import java.util.Set;
 public class KnowledgeCategoryRouter {
 
     public static final String NO_CATEGORY = "none";
-
-    private static final Set<String> ALLOWED_CATEGORIES = Set.of(
-            "ticket",
-            "refund",
-            "security",
-            NO_CATEGORY
-    );
 
     private final ChatClient chatClient;
     private final AiPrompts prompts;
@@ -40,20 +34,24 @@ public class KnowledgeCategoryRouter {
      * Classifies a message into an allowed knowledge category.
      *
      * @param message user message to classify
+     * @param availableCategories categories discovered from knowledge metadata
      * @return structured routing decision
      * @throws AiProviderException if routing fails or returns an unsupported category
      */
-    public RoutingDecision route(String message) {
+    public RoutingDecision route(String message, Set<String> availableCategories) {
         try {
+            String systemPrompt = renderPrompt(availableCategories);
             RoutingDecision decision = chatClient.prompt()
-                    .system(prompts.knowledgeCategoryRouter())
+                    .system(systemPrompt)
                     .user(message)
                     .call()
                     .entity(RoutingDecision.class);
 
             if (decision == null
                     || decision.category() == null
-                    || !ALLOWED_CATEGORIES.contains(decision.category())) {
+                    || decision.category().isBlank()
+                    || (!NO_CATEGORY.equals(decision.category())
+                    && !availableCategories.contains(decision.category()))) {
                 throw new AiProviderException("AI provider returned an invalid routing decision");
             }
             return decision;
@@ -62,5 +60,16 @@ public class KnowledgeCategoryRouter {
         } catch (RuntimeException exception) {
             throw new AiProviderException("AI knowledge category routing failed", exception);
         }
+    }
+
+    private String renderPrompt(Set<String> availableCategories) {
+        String categoryList = availableCategories.stream()
+                .sorted()
+                .map(category -> "- " + category)
+                .collect(Collectors.joining("\n"));
+        if (categoryList.isEmpty()) {
+            categoryList = "(no categories available)";
+        }
+        return prompts.knowledgeCategoryRouter().replace("{{categories}}", categoryList);
     }
 }

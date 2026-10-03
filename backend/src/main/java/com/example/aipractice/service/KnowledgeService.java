@@ -23,6 +23,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Provides application knowledge that can be retrieved for AI responses.
@@ -44,6 +46,7 @@ public class KnowledgeService {
             .withMinChunkSizeChars(20)
             .withMinChunkLengthToEmbed(5)
             .build();
+    private volatile Set<String> availableCategories = Set.of();
     private volatile boolean knowledgeLoaded;
 
     /**
@@ -85,8 +88,11 @@ public class KnowledgeService {
             throw new IllegalArgumentException("Knowledge search query must not be blank");
         }
 
-        RoutingDecision routingDecision = knowledgeCategoryRouter.route(query);
         loadKnowledgeOnce();
+        RoutingDecision routingDecision = knowledgeCategoryRouter.route(
+                query,
+                availableCategories
+        );
         SearchRequest.Builder requestBuilder = SearchRequest.builder()
                 .query(query)
                 .topK(TOP_K)
@@ -105,7 +111,10 @@ public class KnowledgeService {
         if (!knowledgeLoaded) {
             synchronized (this) {
                 if (!knowledgeLoaded) {
-                    vectorStore.add(textSplitter.apply(loadKnowledgeDocuments()));
+                    List<Document> documents = loadKnowledgeDocuments();
+                    Set<String> discoveredCategories = discoverCategories(documents);
+                    vectorStore.add(textSplitter.apply(documents));
+                    availableCategories = discoveredCategories;
                     knowledgeLoaded = true;
                 }
             }
@@ -128,6 +137,17 @@ public class KnowledgeService {
             );
         }
         return documents;
+    }
+
+    private Set<String> discoverCategories(List<Document> documents) {
+        Set<String> categories = new TreeSet<>();
+        documents.stream()
+                .map(document -> document.getMetadata().get(KnowledgeMetadata.CATEGORY))
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(category -> !category.isBlank())
+                .forEach(categories::add);
+        return Set.copyOf(categories);
     }
 
     private Document parseKnowledgeFile(Resource resource) throws IOException {

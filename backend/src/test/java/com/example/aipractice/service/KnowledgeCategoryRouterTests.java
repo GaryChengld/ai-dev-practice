@@ -15,6 +15,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,7 +27,13 @@ import static org.mockito.Mockito.when;
 class KnowledgeCategoryRouterTests {
 
     private static final String ROUTER_PROMPT = """
-            Select exactly one category: ticket, refund, security, or none.
+            You route the user's question to one available knowledge category.
+
+            Available categories:
+            {{categories}}
+
+            Choose exactly one category from the list above.
+            If none applies, return "none".
             """;
 
     private final ChatModel chatModel = mock(ChatModel.class);
@@ -49,7 +56,10 @@ class KnowledgeCategoryRouterTests {
                 {"category":"refund"}
                 """));
 
-        RoutingDecision decision = router.route("How long do refunds take?");
+        RoutingDecision decision = router.route(
+                "How long do refunds take?",
+                Set.of("ticket", "refund", "security")
+        );
 
         assertThat(decision.category()).isEqualTo("refund");
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
@@ -57,7 +67,9 @@ class KnowledgeCategoryRouterTests {
         assertThat(promptCaptor.getValue().getInstructions())
                 .anySatisfy(instruction -> {
                     assertThat(instruction).isInstanceOf(SystemMessage.class);
-                    assertThat(instruction.getText()).contains(ROUTER_PROMPT.strip());
+                    assertThat(instruction.getText())
+                            .contains("Available categories:", "- refund", "- security", "- ticket")
+                            .doesNotContain("{{categories}}");
                 })
                 .anySatisfy(instruction -> {
                     assertThat(instruction).isInstanceOf(UserMessage.class);
@@ -66,12 +78,34 @@ class KnowledgeCategoryRouterTests {
     }
 
     @Test
-    void rejectsCategoryOutsideTheAllowedSet() {
+    void acceptsNewCategoryWithoutAJavaAllowlistChange() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("""
+                {"category":"account"}
+                """));
+
+        assertThat(router.route(
+                "Question about an account",
+                Set.of("account")
+        ).category())
+                .isEqualTo("account");
+    }
+
+    @Test
+    void rejectsCategoryNotPresentInTheRuntimeSet() {
         when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("""
                 {"category":"billing"}
                 """));
 
-        assertThatThrownBy(() -> router.route("Question about an invoice"))
+        assertThatThrownBy(() -> router.route("Question", Set.of("account")))
+                .isInstanceOf(AiProviderException.class)
+                .hasMessage("AI provider returned an invalid routing decision");
+    }
+
+    @Test
+    void rejectsMissingCategory() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("{}"));
+
+        assertThatThrownBy(() -> router.route("Question", Set.of("refund")))
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI provider returned an invalid routing decision");
     }
@@ -81,7 +115,7 @@ class KnowledgeCategoryRouterTests {
         when(chatModel.call(any(Prompt.class)))
                 .thenThrow(new IllegalStateException("Provider failed"));
 
-        assertThatThrownBy(() -> router.route("Question"))
+        assertThatThrownBy(() -> router.route("Question", Set.of("refund")))
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI knowledge category routing failed")
                 .hasCauseInstanceOf(IllegalStateException.class);

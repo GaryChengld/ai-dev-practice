@@ -11,11 +11,13 @@ import org.springframework.core.io.support.ResourcePatternResolver;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -33,7 +35,7 @@ class KnowledgeServiceTests {
     );
 
     KnowledgeServiceTests() {
-        when(knowledgeCategoryRouter.route(anyString()))
+        when(knowledgeCategoryRouter.route(anyString(), anySet()))
                 .thenReturn(new RoutingDecision(KnowledgeCategoryRouter.NO_CATEGORY));
     }
 
@@ -124,7 +126,10 @@ class KnowledgeServiceTests {
 
         knowledgeService.search("refund timing");
 
-        verify(knowledgeCategoryRouter).route("refund timing");
+        verify(knowledgeCategoryRouter).route(
+                "refund timing",
+                Set.of("ticket", "refund", "security")
+        );
         verify(vectorStore).similaritySearch(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getQuery()).isEqualTo("refund timing");
         assertThat(requestCaptor.getValue().getTopK()).isEqualTo(3);
@@ -135,12 +140,19 @@ class KnowledgeServiceTests {
     @Test
     void filtersSearchWhenRouterSelectsACategory() {
         var requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
-        when(knowledgeCategoryRouter.route("How long do I have to request a refund?"))
+        Set<String> categories = Set.of("ticket", "refund", "security");
+        when(knowledgeCategoryRouter.route(
+                "How long do I have to request a refund?",
+                categories
+        ))
                 .thenReturn(new RoutingDecision("refund"));
 
         knowledgeService.search("How long do I have to request a refund?");
 
-        verify(knowledgeCategoryRouter).route("How long do I have to request a refund?");
+        verify(knowledgeCategoryRouter).route(
+                "How long do I have to request a refund?",
+                categories
+        );
         verify(vectorStore).similaritySearch(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getFilterExpression()).isEqualTo(
                 new FilterExpressionBuilder()
@@ -156,6 +168,6 @@ class KnowledgeServiceTests {
                 .hasMessage("Knowledge search query must not be blank");
 
         verify(vectorStore, times(0)).add(anyList());
-        verify(knowledgeCategoryRouter, times(0)).route(anyString());
+        verify(knowledgeCategoryRouter, times(0)).route(anyString(), anySet());
     }
 }

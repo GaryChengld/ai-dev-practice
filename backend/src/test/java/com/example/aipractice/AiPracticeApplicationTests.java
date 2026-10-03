@@ -57,7 +57,13 @@ class AiPracticeApplicationTests {
         assertThat(promptContent.ticketAnalyzer())
                 .contains("You analyze software support tickets.");
         assertThat(promptContent.knowledgeCategoryRouter())
-                .contains("ticket", "refund", "security", "none");
+                .contains(
+                        "Available categories:",
+                        "{{categories}}",
+                        "If none applies",
+                        "Do not invent a category"
+                )
+                .doesNotContain("ticket", "refund", "security");
         assertThat(normalizedPrompt)
                 .contains(
                         "knowledge-context block before the user's question",
