@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -27,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,16 +42,19 @@ class AiChatServiceTests {
     private final AiPrompts prompts = new AiPrompts(
             CHAT_PROMPT,
             "Analyze the ticket.",
-            "Route knowledge questions."
+            "Route knowledge questions.",
+            "Rewrite knowledge questions."
     );
     private final TicketService ticketService = new TicketService();
     private final KnowledgeService knowledgeService = mock(KnowledgeService.class);
+    private final KnowledgeQueryRewriter queryRewriter = mock(KnowledgeQueryRewriter.class);
     private final AiChatService service = new AiChatService(
             ChatClient.create(chatModel),
             prompts,
             new TicketTools(ticketService),
             new TicketPriorityTools(ticketService),
-            knowledgeService
+            knowledgeService,
+            queryRewriter
     );
 
     AiChatServiceTests() {
@@ -104,6 +110,7 @@ class AiChatServiceTests {
                         }
                 );
         verify(knowledgeService).search("How long do refunds take?");
+        verify(queryRewriter, never()).rewrite(anyString(), any());
         assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
@@ -126,6 +133,8 @@ class AiChatServiceTests {
 
     @Test
     void continuesAnExistingConversationWithPreviousMessages() {
+        when(queryRewriter.rewrite(anyString(), any()))
+                .thenReturn("Standalone second question");
         when(chatModel.call(any(Prompt.class)))
                 .thenReturn(modelResponse("First answer"))
                 .thenReturn(modelResponse("Second answer"));
@@ -139,6 +148,7 @@ class AiChatServiceTests {
         assertThat(secondResponse.conversationId()).isEqualTo(firstResponse.conversationId());
         assertThat(secondResponse.message()).isEqualTo("Second answer");
         assertThat(secondResponse.sources()).isEmpty();
+        verify(knowledgeService).search("Standalone second question");
 
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel, org.mockito.Mockito.times(2)).call(promptCaptor.capture());
@@ -162,6 +172,33 @@ class AiChatServiceTests {
                             assertThat(instruction.getText()).isEqualTo("Second question");
                         }
                 );
+    }
+
+    @Test
+    void rewritesFollowUpBeforeKnowledgeRetrieval() {
+        when(chatModel.call(any(Prompt.class)))
+                .thenReturn(modelResponse("Refunds take 3-5 days."))
+                .thenReturn(modelResponse("It can take up to 5 business days."));
+        when(queryRewriter.rewrite(anyString(), any()))
+                .thenReturn("How long do approved refunds take?");
+
+        ChatResponse firstResponse = service.chat(null, "Tell me about approved refunds.");
+        service.chat(firstResponse.conversationId(), "How long do they take?");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> historyCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(queryRewriter).rewrite(
+                eq("How long do they take?"),
+                historyCaptor.capture()
+        );
+        assertThat(historyCaptor.getValue())
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Tell me about approved refunds.",
+                        "Refunds take 3-5 days."
+                );
+        verify(knowledgeService).search("How long do approved refunds take?");
     }
 
     @Test

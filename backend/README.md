@@ -46,9 +46,8 @@ $env:GEMINI_API_KEY = "your-key"
 mvn spring-boot:run
 ```
 
-The optional `GEMINI_MODEL`, `AI_PROMPTS_CHAT_ASSISTANT`, and
-`AI_PROMPTS_TICKET_ANALYZER` environment variables override the defaults in
-`application.yml`. Prompt settings are Markdown filenames resolved from
+The optional `GEMINI_MODEL` and `AI_PROMPTS_*` environment variables override
+the defaults in `application.yml`. Prompt settings are Markdown filenames resolved from
 `src/main/resources/prompts`. Local `.env` files are ignored by Git and
 imported by the application through Spring Boot's optional configuration
 import.
@@ -97,7 +96,9 @@ chat request searches for the three most similar chunks before calling the
 model and adds them directly to the prompt as context. The model does not need
 to choose or call a knowledge tool. It can still use ticket tools for live data,
 allowing a response to combine a ticket's current state with its required
-response time. Any Markdown file added directly under the `knowledge` directory
+response time. For follow-up messages, a separate AI call first rewrites the
+question into a standalone search query using the conversation history. The
+original user message is still used for the final answer. Any Markdown file added directly under the `knowledge` directory
 is discovered automatically; no Java filename list needs to be updated.
 
 ```shell

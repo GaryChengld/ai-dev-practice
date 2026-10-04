@@ -50,7 +50,8 @@ class DynamicKnowledgeRoutingTests {
 
                                 Choose exactly one category from the list above.
                                 If none applies, return "none".
-                                """
+                                """,
+                        "Rewrite knowledge questions."
                 )
         );
 

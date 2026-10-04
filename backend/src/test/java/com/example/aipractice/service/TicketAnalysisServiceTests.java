@@ -34,7 +34,8 @@ class TicketAnalysisServiceTests {
     private final AiPrompts prompts = new AiPrompts(
             "Assist with Java questions.",
             TICKET_PROMPT,
-            "Route knowledge questions."
+            "Route knowledge questions.",
+            "Rewrite knowledge questions."
     );
     private final TicketAnalysisService service = new TicketAnalysisService(
             ChatClient.create(chatModel),

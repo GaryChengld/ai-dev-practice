@@ -42,7 +42,8 @@ class KnowledgeCategoryRouterTests {
             new AiPrompts(
                     "Assist the user.",
                     "Analyze the ticket.",
-                    ROUTER_PROMPT
+                    ROUTER_PROMPT,
+                    "Rewrite knowledge questions."
             )
     );
 

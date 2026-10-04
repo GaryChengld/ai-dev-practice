@@ -8,11 +8,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param chatAssistant Markdown filename for the general chat prompt
  * @param ticketAnalyzer Markdown filename for the ticket-analysis prompt
  * @param knowledgeCategoryRouter Markdown filename for the knowledge-category router prompt
+ * @param knowledgeQueryRewriter Markdown filename for the knowledge-query rewriter prompt
  */
 @ConfigurationProperties(prefix = "ai.prompts")
 public record AiPromptProperties(
         String chatAssistant,
         String ticketAnalyzer,
-        String knowledgeCategoryRouter
+        String knowledgeCategoryRouter,
+        String knowledgeQueryRewriter
 ) {
 }

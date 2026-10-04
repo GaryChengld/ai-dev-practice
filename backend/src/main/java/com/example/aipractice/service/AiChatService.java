@@ -31,6 +31,7 @@ public class AiChatService {
     private final TicketTools ticketTools;
     private final TicketPriorityTools ticketPriorityTools;
     private final KnowledgeService knowledgeService;
+    private final KnowledgeQueryRewriter queryRewriter;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
 
     /**
@@ -41,19 +42,22 @@ public class AiChatService {
      * @param ticketTools ticket operations available to the AI model
      * @param ticketPriorityTools ticket priority operations available to the AI model
      * @param knowledgeService service that retrieves relevant application knowledge
+     * @param queryRewriter service that makes follow-up questions standalone for retrieval
      */
     public AiChatService(
             ChatClient chatClient,
             AiPrompts prompts,
             TicketTools ticketTools,
             TicketPriorityTools ticketPriorityTools,
-            KnowledgeService knowledgeService
+            KnowledgeService knowledgeService,
+            KnowledgeQueryRewriter queryRewriter
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
         this.ticketTools = ticketTools;
         this.ticketPriorityTools = ticketPriorityTools;
         this.knowledgeService = knowledgeService;
+        this.queryRewriter = queryRewriter;
     }
 
     /**
@@ -72,7 +76,10 @@ public class AiChatService {
         synchronized (history) {
             try {
                 UserMessage userMessage = new UserMessage(message);
-                List<Document> relevantKnowledge = knowledgeService.search(message);
+                String searchQuery = history.isEmpty()
+                        ? message
+                        : queryRewriter.rewrite(message, List.copyOf(history));
+                List<Document> relevantKnowledge = knowledgeService.search(searchQuery);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
                         .system(prompts.chatAssistant())

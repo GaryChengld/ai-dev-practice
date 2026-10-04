@@ -40,6 +40,8 @@ class AiPracticeApplicationTests {
         assertThat(prompts.ticketAnalyzer()).isEqualTo("ticket-analyzer.md");
         assertThat(prompts.knowledgeCategoryRouter())
                 .isEqualTo("knowledge-category-router.md");
+        assertThat(prompts.knowledgeQueryRewriter())
+                .isEqualTo("knowledge-query-rewriter.md");
 
         String normalizedPrompt = promptContent.chatAssistant().replaceAll("[`\\s]+", " ");
 
@@ -64,6 +66,13 @@ class AiPracticeApplicationTests {
                         "Do not invent a category"
                 )
                 .doesNotContain("ticket", "refund", "security");
+        assertThat(promptContent.knowledgeQueryRewriter())
+                .contains(
+                        "concise, standalone knowledge-search query",
+                        "only to resolve references or missing context",
+                        "Do not answer the question",
+                        "Return only the rewritten query"
+                );
         assertThat(normalizedPrompt)
                 .contains(
                         "knowledge-context block before the user's question",

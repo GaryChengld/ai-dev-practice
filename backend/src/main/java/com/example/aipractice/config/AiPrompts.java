@@ -6,10 +6,12 @@ package com.example.aipractice.config;
  * @param chatAssistant system instruction for general chat requests
  * @param ticketAnalyzer system instruction for support-ticket analysis
  * @param knowledgeCategoryRouter system instruction for knowledge category routing
+ * @param knowledgeQueryRewriter system instruction for knowledge query rewriting
  */
 public record AiPrompts(
         String chatAssistant,
         String ticketAnalyzer,
-        String knowledgeCategoryRouter
+        String knowledgeCategoryRouter,
+        String knowledgeQueryRewriter
 ) {
 }
