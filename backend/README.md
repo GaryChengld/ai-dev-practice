@@ -97,8 +97,10 @@ model and adds them directly to the prompt as context. The model does not need
 to choose or call a knowledge tool. It can still use ticket tools for live data,
 allowing a response to combine a ticket's current state with its required
 response time. For follow-up messages, a separate AI call first rewrites the
-question into a standalone search query using the conversation history. The
-original user message is still used for the final answer. Any Markdown file added directly under the `knowledge` directory
+question into a standalone search query using the four most recent messages.
+The final answering model receives the ten most recent messages, while the
+application continues to store the complete conversation. The original user
+message is still used for the final answer. Any Markdown file added directly under the `knowledge` directory
 is discovered automatically; no Java filename list needs to be updated.
 
 ```shell

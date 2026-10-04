@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -54,7 +55,8 @@ class AiChatServiceTests {
             new TicketTools(ticketService),
             new TicketPriorityTools(ticketService),
             knowledgeService,
-            queryRewriter
+            queryRewriter,
+            new ConversationContextManager()
     );
 
     AiChatServiceTests() {
@@ -151,7 +153,7 @@ class AiChatServiceTests {
         verify(knowledgeService).search("Standalone second question");
 
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
-        verify(chatModel, org.mockito.Mockito.times(2)).call(promptCaptor.capture());
+        verify(chatModel, times(2)).call(promptCaptor.capture());
         assertThat(promptCaptor.getAllValues().get(1).getInstructions())
                 .hasSize(4)
                 .satisfiesExactly(
@@ -199,6 +201,55 @@ class AiChatServiceTests {
                         "Refunds take 3-5 days."
                 );
         verify(knowledgeService).search("How long do approved refunds take?");
+    }
+
+    @Test
+    void usesDifferentBoundedContextsForRewritingAndFinalChat() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+        when(queryRewriter.rewrite(anyString(), any())).thenReturn("Standalone query");
+
+        ChatResponse response = service.chat(null, "Question 1");
+        for (int questionNumber = 2; questionNumber <= 7; questionNumber++) {
+            response = service.chat(
+                    response.conversationId(),
+                    "Question " + questionNumber
+            );
+        }
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> rewriteContextCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(queryRewriter, times(6)).rewrite(
+                anyString(),
+                rewriteContextCaptor.capture()
+        );
+        assertThat(rewriteContextCaptor.getAllValues().get(5))
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer"
+                );
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(7)).call(promptCaptor.capture());
+        assertThat(promptCaptor.getAllValues().get(6).getInstructions())
+                .extracting(Message::getText)
+                .containsExactly(
+                        CHAT_PROMPT,
+                        "Question 2",
+                        "Answer",
+                        "Question 3",
+                        "Answer",
+                        "Question 4",
+                        "Answer",
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer",
+                        "Question 7"
+                );
     }
 
     @Test

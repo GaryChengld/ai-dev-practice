@@ -32,6 +32,7 @@ public class AiChatService {
     private final TicketPriorityTools ticketPriorityTools;
     private final KnowledgeService knowledgeService;
     private final KnowledgeQueryRewriter queryRewriter;
+    private final ConversationContextManager contextManager;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
 
     /**
@@ -43,6 +44,7 @@ public class AiChatService {
      * @param ticketPriorityTools ticket priority operations available to the AI model
      * @param knowledgeService service that retrieves relevant application knowledge
      * @param queryRewriter service that makes follow-up questions standalone for retrieval
+     * @param contextManager policy for selecting context for each AI operation
      */
     public AiChatService(
             ChatClient chatClient,
@@ -50,7 +52,8 @@ public class AiChatService {
             TicketTools ticketTools,
             TicketPriorityTools ticketPriorityTools,
             KnowledgeService knowledgeService,
-            KnowledgeQueryRewriter queryRewriter
+            KnowledgeQueryRewriter queryRewriter,
+            ConversationContextManager contextManager
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
@@ -58,6 +61,7 @@ public class AiChatService {
         this.ticketPriorityTools = ticketPriorityTools;
         this.knowledgeService = knowledgeService;
         this.queryRewriter = queryRewriter;
+        this.contextManager = contextManager;
     }
 
     /**
@@ -76,14 +80,16 @@ public class AiChatService {
         synchronized (history) {
             try {
                 UserMessage userMessage = new UserMessage(message);
+                List<Message> rewriteContext = contextManager.forQueryRewrite(history);
                 String searchQuery = history.isEmpty()
                         ? message
-                        : queryRewriter.rewrite(message, List.copyOf(history));
+                        : queryRewriter.rewrite(message, rewriteContext);
                 List<Document> relevantKnowledge = knowledgeService.search(searchQuery);
+                List<Message> chatContext = contextManager.forChat(history);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
                         .system(prompts.chatAssistant())
-                        .messages(history)
+                        .messages(chatContext)
                         .user(augmentedMessage)
                         .tools(ticketTools, ticketPriorityTools)
                         .call()
