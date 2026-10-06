@@ -33,7 +33,10 @@ public class AiChatService {
     private final KnowledgeService knowledgeService;
     private final KnowledgeQueryRewriter queryRewriter;
     private final ConversationContextManager contextManager;
+    private final ConversationSummaryService summaryService;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
+    private final Map<String, ConversationSummary> conversationSummaries =
+            new ConcurrentHashMap<>();
 
     /**
      * Creates the AI chat service.
@@ -45,6 +48,7 @@ public class AiChatService {
      * @param knowledgeService service that retrieves relevant application knowledge
      * @param queryRewriter service that makes follow-up questions standalone for retrieval
      * @param contextManager policy for selecting context for each AI operation
+     * @param summaryService service that incrementally compacts older messages
      */
     public AiChatService(
             ChatClient chatClient,
@@ -53,7 +57,8 @@ public class AiChatService {
             TicketPriorityTools ticketPriorityTools,
             KnowledgeService knowledgeService,
             KnowledgeQueryRewriter queryRewriter,
-            ConversationContextManager contextManager
+            ConversationContextManager contextManager,
+            ConversationSummaryService summaryService
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
@@ -62,6 +67,7 @@ public class AiChatService {
         this.knowledgeService = knowledgeService;
         this.queryRewriter = queryRewriter;
         this.contextManager = contextManager;
+        this.summaryService = summaryService;
     }
 
     /**
@@ -85,10 +91,11 @@ public class AiChatService {
                         ? message
                         : queryRewriter.rewrite(message, rewriteContext);
                 List<Document> relevantKnowledge = knowledgeService.search(searchQuery);
+                ConversationSummary summary = updateSummary(resolvedConversationId, history);
                 List<Message> chatContext = contextManager.forChat(history);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
-                        .system(prompts.chatAssistant())
+                        .system(buildSystemPrompt(summary))
                         .messages(chatContext)
                         .user(augmentedMessage)
                         .tools(ticketTools, ticketPriorityTools)
@@ -112,6 +119,38 @@ public class AiChatService {
                 throw new AiProviderException("AI chat request failed", exception);
             }
         }
+    }
+
+    private String buildSystemPrompt(ConversationSummary summary) {
+        if (summary.text().isBlank()) {
+            return prompts.chatAssistant();
+        }
+
+        String summaryContext = prompts.chatSummary()
+                .replace("{{summary}}", summary.text());
+        return prompts.chatAssistant() + "\n\n" + summaryContext;
+    }
+
+    private ConversationSummary updateSummary(String conversationId, List<Message> history) {
+        ConversationSummary existing = conversationSummaries.getOrDefault(
+                conversationId,
+                ConversationSummary.empty()
+        );
+        List<Message> messagesToCompact = contextManager.forSummaryCompaction(
+                history,
+                existing.summarizedMessageCount()
+        );
+        if (messagesToCompact.isEmpty()) {
+            return existing;
+        }
+
+        String updatedText = summaryService.summarize(existing.text(), messagesToCompact);
+        ConversationSummary updated = new ConversationSummary(
+                updatedText,
+                existing.summarizedMessageCount() + messagesToCompact.size()
+        );
+        conversationSummaries.put(conversationId, updated);
+        return updated;
     }
 
     private List<String> extractSources(List<Document> documents) {
@@ -161,6 +200,7 @@ public class AiChatService {
                     generatedId,
                     Collections.synchronizedList(new ArrayList<>())
             );
+            conversationSummaries.put(generatedId, ConversationSummary.empty());
             return generatedId;
         }
 

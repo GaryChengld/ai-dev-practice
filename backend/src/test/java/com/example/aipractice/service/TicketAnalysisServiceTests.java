@@ -35,7 +35,9 @@ class TicketAnalysisServiceTests {
             "Assist with Java questions.",
             TICKET_PROMPT,
             "Route knowledge questions.",
-            "Rewrite knowledge questions."
+            "Rewrite knowledge questions.",
+            "Summarize the conversation.",
+            "Conversation summary: {{summary}}"
     );
     private final TicketAnalysisService service = new TicketAnalysisService(
             ChatClient.create(chatModel),

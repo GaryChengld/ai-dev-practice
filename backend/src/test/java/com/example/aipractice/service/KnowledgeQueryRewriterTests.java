@@ -34,7 +34,9 @@ class KnowledgeQueryRewriterTests {
                     "Assist the user.",
                     "Analyze the ticket.",
                     "Route knowledge questions.",
-                    REWRITER_PROMPT
+                    REWRITER_PROMPT,
+                    "Summarize the conversation.",
+                    "Conversation summary: {{summary}}"
             )
     );
 

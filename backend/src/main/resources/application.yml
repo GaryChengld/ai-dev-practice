@@ -24,3 +24,5 @@ ai:
     ticket-analyzer: ticket-analyzer.md
     knowledge-category-router: knowledge-category-router.md
     knowledge-query-rewriter: knowledge-query-rewriter.md
+    conversation-summarizer: conversation-summarizer.md
+    chat-summary: chat-summary.md

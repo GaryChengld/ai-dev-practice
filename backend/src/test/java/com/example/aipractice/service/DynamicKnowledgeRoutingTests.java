@@ -51,7 +51,9 @@ class DynamicKnowledgeRoutingTests {
                                 Choose exactly one category from the list above.
                                 If none applies, return "none".
                                 """,
-                        "Rewrite knowledge questions."
+                        "Rewrite knowledge questions.",
+                        "Summarize the conversation.",
+                        "Conversation summary: {{summary}}"
                 )
         );
 

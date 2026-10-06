@@ -39,23 +39,52 @@ class ConversationContextManagerTests {
     }
 
     @Test
-    void selectsLastTenMessagesForChat() {
+    void selectsLastFourMessagesForChatAfterSummaryThreshold() {
         List<Message> context = contextManager.forChat(messages(12));
 
         assertThat(context)
                 .extracting(Message::getText)
                 .containsExactly(
-                        "Message 3",
-                        "Message 4",
-                        "Message 5",
-                        "Message 6",
-                        "Message 7",
-                        "Message 8",
                         "Message 9",
                         "Message 10",
                         "Message 11",
                         "Message 12"
                 );
+    }
+
+    @Test
+    void keepsAllChatMessagesAndDoesNotCompactAtThreshold() {
+        List<Message> history = messages(10);
+
+        assertThat(contextManager.forChat(history)).isEqualTo(history);
+        assertThat(contextManager.forSummaryCompaction(history, 0)).isEmpty();
+    }
+
+    @Test
+    void selectsOlderUnsummarizedMessagesForInitialCompaction() {
+        List<Message> context = contextManager.forSummaryCompaction(messages(12), 0);
+
+        assertThat(context)
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Message 1",
+                        "Message 2",
+                        "Message 3",
+                        "Message 4",
+                        "Message 5",
+                        "Message 6",
+                        "Message 7",
+                        "Message 8"
+                );
+    }
+
+    @Test
+    void selectsOnlyNewlyOldMessagesForRollingCompaction() {
+        List<Message> context = contextManager.forSummaryCompaction(messages(14), 8);
+
+        assertThat(context)
+                .extracting(Message::getText)
+                .containsExactly("Message 9", "Message 10");
     }
 
     @Test

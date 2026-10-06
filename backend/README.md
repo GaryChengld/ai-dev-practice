@@ -98,10 +98,14 @@ to choose or call a knowledge tool. It can still use ticket tools for live data,
 allowing a response to combine a ticket's current state with its required
 response time. For follow-up messages, a separate AI call first rewrites the
 question into a standalone search query using the four most recent messages.
-The final answering model receives the ten most recent messages, while the
-application continues to store the complete conversation. The original user
-message is still used for the final answer. Any Markdown file added directly under the `knowledge` directory
-is discovered automatically; no Java filename list needs to be updated.
+The application continues to store the complete conversation, but it no longer
+sends an ever-growing history to the final model. Up to ten stored messages are
+sent verbatim. Once history exceeds that threshold, an AI-generated rolling
+summary represents the older messages and the four most recent messages remain
+verbatim. Only messages that have newly moved out of recent context are added to
+the existing summary. The original user message is still used for the final
+answer. Any Markdown file added directly under the `knowledge` directory is
+discovered automatically; no Java filename list needs to be updated.
 
 ```shell
 curl -X POST http://localhost:8080/api/ai/chat \

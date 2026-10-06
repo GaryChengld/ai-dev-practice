@@ -51,7 +51,9 @@ public class AiConfiguration {
                 loadPrompt(properties.chatAssistant()),
                 loadPrompt(properties.ticketAnalyzer()),
                 loadPrompt(properties.knowledgeCategoryRouter()),
-                loadPrompt(properties.knowledgeQueryRewriter())
+                loadPrompt(properties.knowledgeQueryRewriter()),
+                loadPrompt(properties.conversationSummarizer()),
+                loadPrompt(properties.chatSummary())
         );
     }
 

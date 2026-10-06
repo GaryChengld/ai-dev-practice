@@ -43,7 +43,9 @@ class KnowledgeCategoryRouterTests {
                     "Assist the user.",
                     "Analyze the ticket.",
                     ROUTER_PROMPT,
-                    "Rewrite knowledge questions."
+                    "Rewrite knowledge questions.",
+                    "Summarize the conversation.",
+                    "Conversation summary: {{summary}}"
             )
     );
 
