@@ -11,18 +11,22 @@ import java.util.List;
 @Component
 public class ConversationContextManager {
 
-    private static final int QUERY_REWRITE_MAX_MESSAGES = 4;
     private static final int SUMMARY_THRESHOLD_MESSAGES = 10;
     private static final int RECENT_CHAT_MAX_MESSAGES = 4;
 
     /**
-     * Returns the recent context needed to resolve references in a search query.
+     * Returns every raw message not represented by the existing rolling summary.
      *
      * @param history complete conversation history
-     * @return an immutable snapshot of at most four recent messages
+     * @param summarizedMessageCount number of leading messages already summarized
+     * @return an immutable snapshot of the unsummarized tail
      */
-    public List<Message> forQueryRewrite(List<Message> history) {
-        return last(history, QUERY_REWRITE_MAX_MESSAGES);
+    public List<Message> forQueryRewrite(
+            List<Message> history,
+            int summarizedMessageCount
+    ) {
+        validateSummaryPosition(history, summarizedMessageCount);
+        return List.copyOf(history.subList(summarizedMessageCount, history.size()));
     }
 
     /**
@@ -51,11 +55,7 @@ public class ConversationContextManager {
             List<Message> history,
             int summarizedMessageCount
     ) {
-        if (summarizedMessageCount < 0 || summarizedMessageCount > history.size()) {
-            throw new IllegalArgumentException(
-                    "summarizedMessageCount must identify a position in history"
-            );
-        }
+        validateSummaryPosition(history, summarizedMessageCount);
         if (history.size() <= SUMMARY_THRESHOLD_MESSAGES) {
             return List.of();
         }
@@ -65,6 +65,17 @@ public class ConversationContextManager {
             return List.of();
         }
         return List.copyOf(history.subList(summarizedMessageCount, compactUntil));
+    }
+
+    private void validateSummaryPosition(
+            List<Message> history,
+            int summarizedMessageCount
+    ) {
+        if (summarizedMessageCount < 0 || summarizedMessageCount > history.size()) {
+            throw new IllegalArgumentException(
+                    "summarizedMessageCount must identify a position in history"
+            );
+        }
     }
 
     private List<Message> last(List<Message> history, int maxMessages) {

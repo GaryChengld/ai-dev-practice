@@ -220,7 +220,7 @@ class AiChatServiceTests {
     }
 
     @Test
-    void usesDifferentBoundedContextsForRewritingAndFinalChat() {
+    void usesUnsummarizedHistoryForRewritingAndRecentHistoryForFinalChat() {
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
         when(queryRewriter.rewrite(anyString(), anyString(), any()))
                 .thenReturn("Standalone query");
@@ -244,6 +244,14 @@ class AiChatServiceTests {
         assertThat(rewriteContextCaptor.getAllValues().get(5))
                 .extracting(Message::getText)
                 .containsExactly(
+                        "Question 1",
+                        "Answer",
+                        "Question 2",
+                        "Answer",
+                        "Question 3",
+                        "Answer",
+                        "Question 4",
+                        "Answer",
                         "Question 5",
                         "Answer",
                         "Question 6",
@@ -319,10 +327,13 @@ class AiChatServiceTests {
 
         ArgumentCaptor<String> rewriteSummaryCaptor =
                 ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> rewriteContextCaptor =
+                ArgumentCaptor.forClass(List.class);
         verify(queryRewriter, times(7)).rewrite(
                 anyString(),
                 rewriteSummaryCaptor.capture(),
-                any()
+                rewriteContextCaptor.capture()
         );
         assertThat(rewriteSummaryCaptor.getAllValues())
                 .containsExactly(
@@ -333,6 +344,16 @@ class AiChatServiceTests {
                         "",
                         "",
                         "Summary through question 4"
+                );
+        assertThat(rewriteContextCaptor.getAllValues().get(6))
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer",
+                        "Question 7",
+                        "Answer"
                 );
     }
 

@@ -17,14 +17,21 @@ class ConversationContextManagerTests {
             new ConversationContextManager();
 
     @Test
-    void selectsLastFourMessagesForQueryRewrite() {
-        List<Message> history = messages(7);
+    void selectsEveryMessageNotCoveredByTheSummaryForQueryRewrite() {
+        List<Message> history = messages(14);
 
-        List<Message> context = contextManager.forQueryRewrite(history);
+        List<Message> context = contextManager.forQueryRewrite(history, 8);
 
         assertThat(context)
                 .extracting(Message::getText)
-                .containsExactly("Message 4", "Message 5", "Message 6", "Message 7");
+                .containsExactly(
+                        "Message 9",
+                        "Message 10",
+                        "Message 11",
+                        "Message 12",
+                        "Message 13",
+                        "Message 14"
+                );
         assertThat(history)
                 .extracting(Message::getText)
                 .containsExactly(
@@ -34,8 +41,43 @@ class ConversationContextManagerTests {
                         "Message 4",
                         "Message 5",
                         "Message 6",
-                        "Message 7"
+                        "Message 7",
+                        "Message 8",
+                        "Message 9",
+                        "Message 10",
+                        "Message 11",
+                        "Message 12",
+                        "Message 13",
+                        "Message 14"
                 );
+    }
+
+    @Test
+    void selectsTheCompleteHistoryWhenThereIsNoSummary() {
+        List<Message> history = messages(4);
+
+        List<Message> context = contextManager.forQueryRewrite(history, 0);
+
+        assertThat(context)
+                .extracting(Message::getText)
+                .containsExactly("Message 1", "Message 2", "Message 3", "Message 4");
+    }
+
+    @Test
+    void selectsNoRewriteMessagesWhenTheSummaryCoversTheCompleteHistory() {
+        assertThat(contextManager.forQueryRewrite(messages(8), 8)).isEmpty();
+    }
+
+    @Test
+    void rejectsAnInvalidSummaryPositionForQueryRewrite() {
+        List<Message> history = messages(4);
+
+        assertThatThrownBy(() -> contextManager.forQueryRewrite(history, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("summarizedMessageCount must identify a position in history");
+        assertThatThrownBy(() -> contextManager.forQueryRewrite(history, 5))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("summarizedMessageCount must identify a position in history");
     }
 
     @Test

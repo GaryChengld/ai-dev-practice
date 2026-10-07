@@ -89,7 +89,10 @@ public class AiChatService {
                 ConversationSummary existingSummary = getConversationSummary(
                         resolvedConversationId
                 );
-                List<Message> rewriteContext = contextManager.forQueryRewrite(history);
+                List<Message> rewriteContext = contextManager.forQueryRewrite(
+                        history,
+                        existingSummary.summarizedMessageCount()
+                );
                 String searchQuery = history.isEmpty()
                         ? message
                         : queryRewriter.rewrite(
