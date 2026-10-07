@@ -25,7 +25,12 @@ import static org.mockito.Mockito.when;
 
 class KnowledgeQueryRewriterTests {
 
-    private static final String REWRITER_PROMPT = "Rewrite into a standalone query.";
+    private static final String REWRITER_PROMPT = """
+            Rewrite into a standalone query.
+            <conversation-summary>
+            {{conversationSummary}}
+            </conversation-summary>
+            """;
 
     private final ChatModel chatModel = mock(ChatModel.class);
     private final KnowledgeQueryRewriter rewriter = new KnowledgeQueryRewriter(
@@ -54,7 +59,11 @@ class KnowledgeQueryRewriterTests {
                 new AssistantMessage("Approved refunds take 3-5 business days.")
         );
 
-        String result = rewriter.rewrite("How long do they take?", history);
+        String result = rewriter.rewrite(
+                "How long do they take?",
+                "The user has an approved refund.",
+                history
+        );
 
         assertThat(result).isEqualTo("How long do approved refunds take?");
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
@@ -64,7 +73,12 @@ class KnowledgeQueryRewriterTests {
                 .satisfiesExactly(
                         instruction -> {
                             assertThat(instruction).isInstanceOf(SystemMessage.class);
-                            assertThat(instruction.getText()).isEqualTo(REWRITER_PROMPT);
+                            assertThat(instruction.getText()).isEqualTo(
+                                    REWRITER_PROMPT.replace(
+                                            "{{conversationSummary}}",
+                                            "The user has an approved refund."
+                                    )
+                            );
                         },
                         instruction -> assertThat(instruction.getText())
                                 .isEqualTo("Tell me about approved refunds."),
@@ -81,7 +95,7 @@ class KnowledgeQueryRewriterTests {
     void rejectsAnEmptyRewrittenQuery() {
         when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("  "));
 
-        assertThatThrownBy(() -> rewriter.rewrite("What about it?", List.of()))
+        assertThatThrownBy(() -> rewriter.rewrite("What about it?", "", List.of()))
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI provider returned no rewritten query");
     }
@@ -91,7 +105,7 @@ class KnowledgeQueryRewriterTests {
         when(chatModel.call(any(Prompt.class)))
                 .thenThrow(new IllegalStateException("Provider failed"));
 
-        assertThatThrownBy(() -> rewriter.rewrite("What about it?", List.of()))
+        assertThatThrownBy(() -> rewriter.rewrite("What about it?", null, List.of()))
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI knowledge query rewrite failed")
                 .hasCauseInstanceOf(IllegalStateException.class);

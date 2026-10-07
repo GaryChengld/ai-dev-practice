@@ -86,12 +86,23 @@ public class AiChatService {
         synchronized (history) {
             try {
                 UserMessage userMessage = new UserMessage(message);
+                ConversationSummary existingSummary = getConversationSummary(
+                        resolvedConversationId
+                );
                 List<Message> rewriteContext = contextManager.forQueryRewrite(history);
                 String searchQuery = history.isEmpty()
                         ? message
-                        : queryRewriter.rewrite(message, rewriteContext);
+                        : queryRewriter.rewrite(
+                                message,
+                                existingSummary.text(),
+                                rewriteContext
+                        );
                 List<Document> relevantKnowledge = knowledgeService.search(searchQuery);
-                ConversationSummary summary = updateSummary(resolvedConversationId, history);
+                ConversationSummary summary = updateSummary(
+                        resolvedConversationId,
+                        existingSummary,
+                        history
+                );
                 List<Message> chatContext = contextManager.forChat(history);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
@@ -131,11 +142,18 @@ public class AiChatService {
         return prompts.chatAssistant() + "\n\n" + summaryContext;
     }
 
-    private ConversationSummary updateSummary(String conversationId, List<Message> history) {
-        ConversationSummary existing = conversationSummaries.getOrDefault(
+    private ConversationSummary getConversationSummary(String conversationId) {
+        return conversationSummaries.getOrDefault(
                 conversationId,
                 ConversationSummary.empty()
         );
+    }
+
+    private ConversationSummary updateSummary(
+            String conversationId,
+            ConversationSummary existing,
+            List<Message> history
+    ) {
         List<Message> messagesToCompact = contextManager.forSummaryCompaction(
                 history,
                 existing.summarizedMessageCount()

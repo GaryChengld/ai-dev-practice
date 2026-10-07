@@ -32,15 +32,24 @@ public class KnowledgeQueryRewriter {
      * Rewrites the latest message using prior conversation context.
      *
      * @param message latest user message
-     * @param history prior user and assistant messages
+     * @param conversationSummary compacted context from earlier conversation messages
+     * @param recentHistory recent user and assistant messages
      * @return concise standalone query for knowledge retrieval
      * @throws AiProviderException if rewriting fails or returns no content
      */
-    public String rewrite(String message, List<Message> history) {
+    public String rewrite(
+            String message,
+            String conversationSummary,
+            List<Message> recentHistory
+    ) {
         try {
+            String rewriterPrompt = prompts.knowledgeQueryRewriter().replace(
+                    "{{conversationSummary}}",
+                    conversationSummary == null ? "" : conversationSummary
+            );
             String rewrittenQuery = chatClient.prompt()
-                    .system(prompts.knowledgeQueryRewriter())
-                    .messages(history)
+                    .system(rewriterPrompt)
+                    .messages(recentHistory)
                     .user(message)
                     .call()
                     .content();

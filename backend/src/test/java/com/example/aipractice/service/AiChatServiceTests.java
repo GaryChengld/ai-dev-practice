@@ -127,7 +127,7 @@ class AiChatServiceTests {
                         }
                 );
         verify(knowledgeService).search("How long do refunds take?");
-        verify(queryRewriter, never()).rewrite(anyString(), any());
+        verify(queryRewriter, never()).rewrite(anyString(), anyString(), any());
         assertThat(sentPrompt.getOptions()).isInstanceOf(ToolCallingChatOptions.class);
         ToolCallingChatOptions options = (ToolCallingChatOptions) sentPrompt.getOptions();
         assertThat(options.getToolCallbacks())
@@ -150,7 +150,7 @@ class AiChatServiceTests {
 
     @Test
     void continuesAnExistingConversationWithPreviousMessages() {
-        when(queryRewriter.rewrite(anyString(), any()))
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
                 .thenReturn("Standalone second question");
         when(chatModel.call(any(Prompt.class)))
                 .thenReturn(modelResponse("First answer"))
@@ -196,7 +196,7 @@ class AiChatServiceTests {
         when(chatModel.call(any(Prompt.class)))
                 .thenReturn(modelResponse("Refunds take 3-5 days."))
                 .thenReturn(modelResponse("It can take up to 5 business days."));
-        when(queryRewriter.rewrite(anyString(), any()))
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
                 .thenReturn("How long do approved refunds take?");
 
         ChatResponse firstResponse = service.chat(null, "Tell me about approved refunds.");
@@ -207,6 +207,7 @@ class AiChatServiceTests {
                 ArgumentCaptor.forClass(List.class);
         verify(queryRewriter).rewrite(
                 eq("How long do they take?"),
+                eq(""),
                 historyCaptor.capture()
         );
         assertThat(historyCaptor.getValue())
@@ -221,7 +222,8 @@ class AiChatServiceTests {
     @Test
     void usesDifferentBoundedContextsForRewritingAndFinalChat() {
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
-        when(queryRewriter.rewrite(anyString(), any())).thenReturn("Standalone query");
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
 
         ChatResponse response = service.chat(null, "Question 1");
         for (int questionNumber = 2; questionNumber <= 7; questionNumber++) {
@@ -236,6 +238,7 @@ class AiChatServiceTests {
                 ArgumentCaptor.forClass(List.class);
         verify(queryRewriter, times(6)).rewrite(
                 anyString(),
+                eq(""),
                 rewriteContextCaptor.capture()
         );
         assertThat(rewriteContextCaptor.getAllValues().get(5))
@@ -284,7 +287,8 @@ class AiChatServiceTests {
     @Test
     void rollsTheSummaryForwardUsingOnlyNewlyOldMessages() {
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
-        when(queryRewriter.rewrite(anyString(), any())).thenReturn("Standalone query");
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
         when(summaryService.summarize(eq(""), any()))
                 .thenReturn("Summary through question 4");
         when(summaryService.summarize(eq("Summary through question 4"), any()))
@@ -312,6 +316,24 @@ class AiChatServiceTests {
         assertThat(compactedMessagesCaptor.getAllValues().get(1))
                 .extracting(Message::getText)
                 .containsExactly("Question 5", "Answer");
+
+        ArgumentCaptor<String> rewriteSummaryCaptor =
+                ArgumentCaptor.forClass(String.class);
+        verify(queryRewriter, times(7)).rewrite(
+                anyString(),
+                rewriteSummaryCaptor.capture(),
+                any()
+        );
+        assertThat(rewriteSummaryCaptor.getAllValues())
+                .containsExactly(
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Summary through question 4"
+                );
     }
 
     @Test
