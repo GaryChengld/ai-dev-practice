@@ -4,6 +4,8 @@ import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.exception.AiProviderException;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.retry.NonTransientAiException;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -53,7 +55,7 @@ public class ConversationSummaryService {
             return summary.trim();
         } catch (AiProviderException exception) {
             throw exception;
-        } catch (RuntimeException exception) {
+        } catch (TransientAiException | NonTransientAiException exception) {
             throw new AiProviderException("AI conversation summarization failed", exception);
         }
     }

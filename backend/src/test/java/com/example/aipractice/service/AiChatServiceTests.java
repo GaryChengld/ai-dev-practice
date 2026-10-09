@@ -358,6 +358,106 @@ class AiChatServiceTests {
     }
 
     @Test
+    void fallsBackToExistingSummaryAndAllUnsummarizedMessagesWhenCompactionFails() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
+        when(summaryService.summarize(eq(""), any()))
+                .thenReturn("Summary through question 4");
+        when(summaryService.summarize(eq("Summary through question 4"), any()))
+                .thenThrow(new AiProviderException("Summarizer unavailable"));
+
+        ChatResponse response = service.chat(null, "Question 1");
+        for (int questionNumber = 2; questionNumber <= 8; questionNumber++) {
+            response = service.chat(
+                    response.conversationId(),
+                    "Question " + questionNumber
+            );
+        }
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(8)).call(promptCaptor.capture());
+        assertThat(promptCaptor.getAllValues().get(7).getInstructions())
+                .extracting(Message::getText)
+                .containsExactly(
+                        CHAT_PROMPT + "\n\n" + CHAT_SUMMARY_TEMPLATE.replace(
+                                "{{summary}}",
+                                "Summary through question 4"
+                        ),
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer",
+                        "Question 7",
+                        "Answer",
+                        "Question 8"
+                );
+    }
+
+    @Test
+    void retriesFailedCompactionWithoutAdvancingSummaryCoverage() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
+        when(summaryService.summarize(eq(""), any()))
+                .thenReturn("Summary through question 4");
+        when(summaryService.summarize(eq("Summary through question 4"), any()))
+                .thenThrow(new AiProviderException("Summarizer unavailable"))
+                .thenReturn("Summary through question 6");
+
+        ChatResponse response = service.chat(null, "Question 1");
+        for (int questionNumber = 2; questionNumber <= 9; questionNumber++) {
+            response = service.chat(
+                    response.conversationId(),
+                    "Question " + questionNumber
+            );
+        }
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> compactedMessagesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(summaryService, times(3)).summarize(
+                anyString(),
+                compactedMessagesCaptor.capture()
+        );
+        assertThat(compactedMessagesCaptor.getAllValues().get(1))
+                .extracting(Message::getText)
+                .containsExactly("Question 5", "Answer");
+        assertThat(compactedMessagesCaptor.getAllValues().get(2))
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer"
+                );
+    }
+
+    @Test
+    void doesNotHideUnexpectedCompactionErrors() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
+        when(summaryService.summarize(anyString(), any()))
+                .thenThrow(new IllegalStateException("Programming error"));
+
+        ChatResponse response = service.chat(null, "Question 1");
+        for (int questionNumber = 2; questionNumber <= 6; questionNumber++) {
+            response = service.chat(
+                    response.conversationId(),
+                    "Question " + questionNumber
+            );
+        }
+
+        String conversationId = response.conversationId();
+        assertThatThrownBy(() -> service.chat(conversationId, "Question 7"))
+                .isInstanceOf(AiProviderException.class)
+                .hasMessage("AI chat request failed")
+                .hasCauseInstanceOf(IllegalStateException.class);
+        verify(chatModel, times(6)).call(any(Prompt.class));
+    }
+
+    @Test
     void rejectsAnUnknownConversationId() {
         assertThatThrownBy(() -> service.chat("unknown-id", "Hello"))
                 .isInstanceOf(ConversationNotFoundException.class)

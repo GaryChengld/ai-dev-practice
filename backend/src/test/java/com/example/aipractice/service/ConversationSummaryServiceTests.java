@@ -13,6 +13,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.retry.TransientAiException;
 
 import java.util.List;
 
@@ -106,6 +107,34 @@ class ConversationSummaryServiceTests {
         ))
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI provider returned no conversation summary");
+    }
+
+    @Test
+    void translatesSpringAiProviderFailures() {
+        TransientAiException providerFailure =
+                new TransientAiException("Provider timed out");
+        when(chatModel.call(any(Prompt.class))).thenThrow(providerFailure);
+
+        assertThatThrownBy(() -> summaryService.summarize(
+                "",
+                List.of(new UserMessage("Remember this"))
+        ))
+                .isInstanceOf(AiProviderException.class)
+                .hasMessage("AI conversation summarization failed")
+                .hasCause(providerFailure);
+    }
+
+    @Test
+    void doesNotTranslateUnexpectedRuntimeExceptions() {
+        IllegalStateException programmingFailure =
+                new IllegalStateException("Programming error");
+        when(chatModel.call(any(Prompt.class))).thenThrow(programmingFailure);
+
+        assertThatThrownBy(() -> summaryService.summarize(
+                "",
+                List.of(new UserMessage("Remember this"))
+        ))
+                .isSameAs(programmingFailure);
     }
 
     private ChatResponse response(String text) {

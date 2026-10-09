@@ -101,16 +101,15 @@ public class AiChatService {
                                 rewriteContext
                         );
                 List<Document> relevantKnowledge = knowledgeService.search(searchQuery);
-                ConversationSummary summary = updateSummary(
+                ChatMemoryContext memory = prepareChatMemory(
                         resolvedConversationId,
                         existingSummary,
                         history
                 );
-                List<Message> chatContext = contextManager.forChat(history);
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String response = chatClient.prompt()
-                        .system(buildSystemPrompt(summary))
-                        .messages(chatContext)
+                        .system(buildSystemPrompt(memory.summary()))
+                        .messages(memory.recentMessages())
                         .user(augmentedMessage)
                         .tools(ticketTools, ticketPriorityTools)
                         .call()
@@ -150,6 +149,33 @@ public class AiChatService {
                 conversationId,
                 ConversationSummary.empty()
         );
+    }
+
+    private ChatMemoryContext prepareChatMemory(
+            String conversationId,
+            ConversationSummary existing,
+            List<Message> history
+    ) {
+        try {
+            ConversationSummary updated = updateSummary(
+                    conversationId,
+                    existing,
+                    history
+            );
+            return new ChatMemoryContext(
+                    updated,
+                    contextManager.forChat(history),
+                    true
+            );
+        } catch (AiProviderException exception) {
+            List<Message> unsummarized = List.copyOf(
+                    history.subList(
+                            existing.summarizedMessageCount(),
+                            history.size()
+                    )
+            );
+            return new ChatMemoryContext(existing, unsummarized, false);
+        }
     }
 
     private ConversationSummary updateSummary(
