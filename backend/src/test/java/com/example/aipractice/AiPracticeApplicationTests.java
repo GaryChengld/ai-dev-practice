@@ -1,5 +1,6 @@
 package com.example.aipractice;
 
+import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,9 @@ class AiPracticeApplicationTests {
     private AiPrompts promptContent;
 
     @Autowired
+    private AiContextProperties contextProperties;
+
+    @Autowired
     private VectorStore vectorStore;
 
     @Autowired
@@ -36,6 +40,7 @@ class AiPracticeApplicationTests {
 
     @Test
     void configuresConditionalTicketAttentionWorkflow() {
+        assertThat(contextProperties.queryRewriteMaxInputTokens()).isEqualTo(2_000);
         assertThat(prompts.chatAssistant()).isEqualTo("chat-assistant.md");
         assertThat(prompts.ticketAnalyzer()).isEqualTo("ticket-analyzer.md");
         assertThat(prompts.knowledgeCategoryRouter())

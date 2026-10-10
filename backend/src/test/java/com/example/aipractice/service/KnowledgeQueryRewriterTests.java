@@ -1,5 +1,6 @@
 package com.example.aipractice.service;
 
+import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.exception.AiProviderException;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +44,9 @@ class KnowledgeQueryRewriterTests {
                     REWRITER_PROMPT,
                     "Summarize the conversation.",
                     "Conversation summary: {{summary}}"
-            )
+            ),
+            new TokenBudgetService(),
+            new AiContextProperties(2_000)
     );
 
     KnowledgeQueryRewriterTests() {
@@ -109,6 +113,32 @@ class KnowledgeQueryRewriterTests {
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI knowledge query rewrite failed")
                 .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void usesOriginalQuestionWithoutCallingModelWhenInputExceedsBudget() {
+        KnowledgeQueryRewriter budgetConstrainedRewriter = new KnowledgeQueryRewriter(
+                ChatClient.create(chatModel),
+                new AiPrompts(
+                        "Assist the user.",
+                        "Analyze the ticket.",
+                        "Route knowledge questions.",
+                        REWRITER_PROMPT,
+                        "Summarize the conversation.",
+                        "Conversation summary: {{summary}}"
+                ),
+                new TokenBudgetService(),
+                new AiContextProperties(1)
+        );
+
+        String result = budgetConstrainedRewriter.rewrite(
+                "How long do they take?",
+                "The user has an approved refund.",
+                List.of(new UserMessage("Tell me about approved refunds."))
+        );
+
+        assertThat(result).isEqualTo("How long do they take?");
+        verify(chatModel, never()).call(any(Prompt.class));
     }
 
     private ChatResponse chatResponse(String text) {

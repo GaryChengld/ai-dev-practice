@@ -19,6 +19,8 @@ server:
   port: ${SERVER_PORT:8080}
 
 ai:
+  context:
+    query-rewrite-max-input-tokens: 2000
   prompts:
     chat-assistant: chat-assistant.md
     ticket-analyzer: ticket-analyzer.md
