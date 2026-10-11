@@ -64,6 +64,7 @@ class AiChatServiceTests {
     private final KnowledgeQueryRewriter queryRewriter = mock(KnowledgeQueryRewriter.class);
     private final ConversationSummaryService summaryService =
             mock(ConversationSummaryService.class);
+    private final TokenBudgetService tokenBudgetService = new TokenBudgetService();
     private final AiChatService service = new AiChatService(
             ChatClient.create(chatModel),
             prompts,
@@ -73,7 +74,8 @@ class AiChatServiceTests {
             queryRewriter,
             new ConversationContextManager(),
             summaryService,
-            new TokenBudgetService(),
+            tokenBudgetService,
+            new RagContextBudgetService(tokenBudgetService),
             new AiContextProperties(2_000, 8_000)
     );
 
@@ -141,6 +143,51 @@ class AiChatServiceTests {
                         "getTicketStatus",
                         "getTicketPriority"
                 );
+    }
+
+    @Test
+    void returnsSourcesOnlyForKnowledgeSelectedWithinTheBudget() {
+        TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
+        when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
+                .thenReturn(7_900, 8_000);
+        when(controlledBudget.fitsBudget(8_000, 8_000)).thenReturn(true);
+        String selectedText = "A".repeat(30);
+        String omittedText = "B".repeat(300);
+        when(controlledBudget.estimateTokens(selectedText)).thenReturn(10);
+        when(controlledBudget.estimateTokens(omittedText)).thenReturn(100);
+        AiChatService controlledService = new AiChatService(
+                ChatClient.create(chatModel),
+                prompts,
+                new TicketTools(ticketService),
+                new TicketPriorityTools(ticketService),
+                knowledgeService,
+                queryRewriter,
+                new ConversationContextManager(),
+                summaryService,
+                controlledBudget,
+                new RagContextBudgetService(controlledBudget),
+                new AiContextProperties(2_000, 8_000)
+        );
+        when(knowledgeService.search("Question")).thenReturn(List.of(
+                new Document(
+                        selectedText,
+                        Map.of(KnowledgeMetadata.SOURCE, "selected.md")
+                ),
+                new Document(
+                        omittedText,
+                        Map.of(KnowledgeMetadata.SOURCE, "omitted.md")
+                )
+        ));
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+
+        ChatResponse response = controlledService.chat(null, "Question");
+
+        assertThat(response.sources()).containsExactly("selected.md");
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getInstructions().get(1).getText())
+                .contains(selectedText)
+                .doesNotContain(omittedText);
     }
 
     @Test
@@ -491,6 +538,11 @@ class AiChatServiceTests {
 
     @Test
     void rejectsFinalChatWhenItsPromptExceedsTheBudgetWithoutCallingTheModel() {
+        TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
+        when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
+                .thenReturn(8_500);
+        RagContextBudgetService ragContextBudgetService =
+                mock(RagContextBudgetService.class);
         AiChatService budgetConstrainedService = new AiChatService(
                 ChatClient.create(chatModel),
                 prompts,
@@ -500,13 +552,15 @@ class AiChatServiceTests {
                 queryRewriter,
                 new ConversationContextManager(),
                 summaryService,
-                new TokenBudgetService(),
-                new AiContextProperties(2_000, 1)
+                controlledBudget,
+                ragContextBudgetService,
+                new AiContextProperties(2_000, 8_000)
         );
 
         assertThatThrownBy(() -> budgetConstrainedService.chat(null, "Hello"))
                 .isInstanceOf(ContextBudgetExceededException.class)
                 .hasMessage("Final chat context exceeds the configured token budget");
+        verify(ragContextBudgetService, never()).selectDocuments(any(), anyInt());
         verify(chatModel, never()).call(any(Prompt.class));
     }
 
@@ -527,6 +581,7 @@ class AiChatServiceTests {
                 new ConversationContextManager(),
                 summaryService,
                 controlledBudget,
+                new RagContextBudgetService(controlledBudget),
                 new AiContextProperties(2_000, 8_000)
         );
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
@@ -554,13 +609,13 @@ class AiChatServiceTests {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Message>> fallbackHistoryCaptor =
                 ArgumentCaptor.forClass(List.class);
-        verify(controlledBudget, times(8)).estimatePromptTokens(
+        verify(controlledBudget, times(16)).estimatePromptTokens(
                 anyString(),
                 fallbackHistoryCaptor.capture(),
                 anyString(),
                 any()
         );
-        assertThat(fallbackHistoryCaptor.getAllValues().get(7))
+        assertThat(fallbackHistoryCaptor.getAllValues().get(15))
                 .extracting(Message::getText)
                 .containsExactly(
                         "Question 5",

@@ -40,6 +40,7 @@ public class AiChatService {
     private final ConversationContextManager contextManager;
     private final ConversationSummaryService summaryService;
     private final TokenBudgetService tokenBudgetService;
+    private final RagContextBudgetService ragContextBudgetService;
     private final int maxInputTokens;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
     private final Map<String, ConversationSummary> conversationSummaries =
@@ -57,6 +58,7 @@ public class AiChatService {
      * @param contextManager policy for selecting context for each AI operation
      * @param summaryService service that incrementally compacts older messages
      * @param tokenBudgetService service that estimates prompt token usage
+     * @param ragContextBudgetService service that selects knowledge within the remaining budget
      * @param contextProperties input-token budgets for context-management operations
      */
     public AiChatService(
@@ -69,6 +71,7 @@ public class AiChatService {
             ConversationContextManager contextManager,
             ConversationSummaryService summaryService,
             TokenBudgetService tokenBudgetService,
+            RagContextBudgetService ragContextBudgetService,
             AiContextProperties contextProperties
     ) {
         this.chatClient = chatClient;
@@ -81,6 +84,7 @@ public class AiChatService {
         this.contextManager = contextManager;
         this.summaryService = summaryService;
         this.tokenBudgetService = tokenBudgetService;
+        this.ragContextBudgetService = ragContextBudgetService;
         this.maxInputTokens = contextProperties.finalChatMaxInputTokens();
     }
 
@@ -121,8 +125,24 @@ public class AiChatService {
                         existingSummary,
                         history
                 );
-                String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
                 String systemPrompt = buildSystemPrompt(memory.summary());
+                int requiredTokens = tokenBudgetService.estimatePromptTokens(
+                        systemPrompt,
+                        memory.recentMessages(),
+                        message,
+                        toolCallbacks
+                );
+                int availableRagTokens = maxInputTokens - requiredTokens;
+                if (availableRagTokens < 0) {
+                    throw new ContextBudgetExceededException(
+                            "Final chat context exceeds the configured token budget"
+                    );
+                }
+                List<Document> selectedKnowledge = ragContextBudgetService.selectDocuments(
+                        relevantKnowledge,
+                        availableRagTokens
+                );
+                String augmentedMessage = addKnowledgeContext(message, selectedKnowledge);
                 int estimatedTokens = tokenBudgetService.estimatePromptTokens(
                         systemPrompt,
                         memory.recentMessages(),
@@ -151,7 +171,7 @@ public class AiChatService {
                 return new ChatResponse(
                         resolvedConversationId,
                         response,
-                        extractSources(relevantKnowledge)
+                        extractSources(selectedKnowledge)
                 );
             } catch (AiProviderException | ContextBudgetExceededException exception) {
                 throw exception;
