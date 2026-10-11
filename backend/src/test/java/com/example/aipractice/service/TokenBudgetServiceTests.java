@@ -31,6 +31,17 @@ class TokenBudgetServiceTests {
     }
 
     @Test
+    void estimatesACompletePromptWithSystemAndUserMessageOverhead() {
+        int estimate = tokenBudgetService.estimatePromptTokens(
+                "abc",
+                List.of(new AssistantMessage("abcdef")),
+                "abcdefghi"
+        );
+
+        assertThat(estimate).isEqualTo(30);
+    }
+
+    @Test
     void treatsTheBudgetAsInclusive() {
         assertThat(tokenBudgetService.fitsBudget(2_000, 2_000)).isTrue();
         assertThat(tokenBudgetService.fitsBudget(2_001, 2_000)).isFalse();

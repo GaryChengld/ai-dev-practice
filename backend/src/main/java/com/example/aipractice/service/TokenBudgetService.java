@@ -43,6 +43,27 @@ public class TokenBudgetService {
     }
 
     /**
+     * Estimates a complete prompt, including system and user message overhead.
+     * Tool schemas and provider-specific formatting are not included.
+     *
+     * @param systemPrompt rendered system prompt
+     * @param history conversation messages between the system and user messages
+     * @param userMessage current user message, including any retrieved knowledge
+     * @return estimated input token count
+     */
+    public int estimatePromptTokens(
+            String systemPrompt,
+            List<Message> history,
+            String userMessage
+    ) {
+        return estimateTokens(systemPrompt)
+                + MESSAGE_OVERHEAD_TOKENS
+                + estimateTokens(history)
+                + estimateTokens(userMessage)
+                + MESSAGE_OVERHEAD_TOKENS;
+    }
+
+    /**
      * Tests an estimate against an inclusive input budget.
      *
      * @param estimatedTokens estimated input size

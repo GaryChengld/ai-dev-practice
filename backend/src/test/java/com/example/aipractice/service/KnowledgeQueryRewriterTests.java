@@ -46,7 +46,7 @@ class KnowledgeQueryRewriterTests {
                     "Conversation summary: {{summary}}"
             ),
             new TokenBudgetService(),
-            new AiContextProperties(2_000)
+            new AiContextProperties(2_000, 8_000)
     );
 
     KnowledgeQueryRewriterTests() {
@@ -128,7 +128,7 @@ class KnowledgeQueryRewriterTests {
                         "Conversation summary: {{summary}}"
                 ),
                 new TokenBudgetService(),
-                new AiContextProperties(1)
+                new AiContextProperties(1, 8_000)
         );
 
         String result = budgetConstrainedRewriter.rewrite(

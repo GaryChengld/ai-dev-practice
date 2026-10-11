@@ -1,9 +1,11 @@
 package com.example.aipractice.service;
 
+import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.exception.ContextBudgetExceededException;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
@@ -69,7 +71,9 @@ class AiChatServiceTests {
             knowledgeService,
             queryRewriter,
             new ConversationContextManager(),
-            summaryService
+            summaryService,
+            new TokenBudgetService(),
+            new AiContextProperties(2_000, 8_000)
     );
 
     AiChatServiceTests() {
@@ -482,6 +486,27 @@ class AiChatServiceTests {
                 .isInstanceOf(AiProviderException.class)
                 .hasMessage("AI chat request failed")
                 .hasCauseInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void rejectsFinalChatWhenItsPromptExceedsTheBudgetWithoutCallingTheModel() {
+        AiChatService budgetConstrainedService = new AiChatService(
+                ChatClient.create(chatModel),
+                prompts,
+                new TicketTools(ticketService),
+                new TicketPriorityTools(ticketService),
+                knowledgeService,
+                queryRewriter,
+                new ConversationContextManager(),
+                summaryService,
+                new TokenBudgetService(),
+                new AiContextProperties(2_000, 1)
+        );
+
+        assertThatThrownBy(() -> budgetConstrainedService.chat(null, "Hello"))
+                .isInstanceOf(ContextBudgetExceededException.class)
+                .hasMessage("Final chat context exceeds the configured token budget");
+        verify(chatModel, never()).call(any(Prompt.class));
     }
 
     private org.springframework.ai.chat.model.ChatResponse modelResponse(String text) {

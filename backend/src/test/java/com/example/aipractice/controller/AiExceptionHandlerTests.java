@@ -2,6 +2,7 @@ package com.example.aipractice.controller;
 
 import com.example.aipractice.dto.ApiError;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.exception.ContextBudgetExceededException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,19 @@ class AiExceptionHandlerTests {
         assertThat(response.getBody()).isEqualTo(new ApiError(
                 "CONVERSATION_NOT_FOUND",
                 "Conversation not found: missing-id"
+        ));
+    }
+
+    @Test
+    void mapsAnExceededContextBudgetToUnprocessableEntity() {
+        ResponseEntity<ApiError> response = handler.handleContextBudgetExceeded(
+                new ContextBudgetExceededException("Internal budget details")
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody()).isEqualTo(new ApiError(
+                "CONTEXT_BUDGET_EXCEEDED",
+                "Conversation context is too large."
         ));
     }
 }

@@ -21,6 +21,7 @@ server:
 ai:
   context:
     query-rewrite-max-input-tokens: 2000
+    final-chat-max-input-tokens: 8000
   prompts:
     chat-assistant: chat-assistant.md
     ticket-analyzer: ticket-analyzer.md

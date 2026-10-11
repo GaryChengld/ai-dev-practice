@@ -41,6 +41,7 @@ class AiPracticeApplicationTests {
     @Test
     void configuresConditionalTicketAttentionWorkflow() {
         assertThat(contextProperties.queryRewriteMaxInputTokens()).isEqualTo(2_000);
+        assertThat(contextProperties.finalChatMaxInputTokens()).isEqualTo(8_000);
         assertThat(prompts.chatAssistant()).isEqualTo("chat-assistant.md");
         assertThat(prompts.ticketAnalyzer()).isEqualTo("ticket-analyzer.md");
         assertThat(prompts.knowledgeCategoryRouter())

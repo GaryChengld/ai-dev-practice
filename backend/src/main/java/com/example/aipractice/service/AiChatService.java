@@ -1,9 +1,11 @@
 package com.example.aipractice.service;
 
+import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.dto.ChatResponse;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.exception.ContextBudgetExceededException;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.springframework.ai.chat.client.ChatClient;
@@ -34,6 +36,8 @@ public class AiChatService {
     private final KnowledgeQueryRewriter queryRewriter;
     private final ConversationContextManager contextManager;
     private final ConversationSummaryService summaryService;
+    private final TokenBudgetService tokenBudgetService;
+    private final int maxInputTokens;
     private final Map<String, List<Message>> conversationHistory = new ConcurrentHashMap<>();
     private final Map<String, ConversationSummary> conversationSummaries =
             new ConcurrentHashMap<>();
@@ -49,6 +53,8 @@ public class AiChatService {
      * @param queryRewriter service that makes follow-up questions standalone for retrieval
      * @param contextManager policy for selecting context for each AI operation
      * @param summaryService service that incrementally compacts older messages
+     * @param tokenBudgetService service that estimates prompt token usage
+     * @param contextProperties input-token budgets for context-management operations
      */
     public AiChatService(
             ChatClient chatClient,
@@ -58,7 +64,9 @@ public class AiChatService {
             KnowledgeService knowledgeService,
             KnowledgeQueryRewriter queryRewriter,
             ConversationContextManager contextManager,
-            ConversationSummaryService summaryService
+            ConversationSummaryService summaryService,
+            TokenBudgetService tokenBudgetService,
+            AiContextProperties contextProperties
     ) {
         this.chatClient = chatClient;
         this.prompts = prompts;
@@ -68,6 +76,8 @@ public class AiChatService {
         this.queryRewriter = queryRewriter;
         this.contextManager = contextManager;
         this.summaryService = summaryService;
+        this.tokenBudgetService = tokenBudgetService;
+        this.maxInputTokens = contextProperties.finalChatMaxInputTokens();
     }
 
     /**
@@ -77,6 +87,7 @@ public class AiChatService {
      * @param message user message to process
      * @return chat response containing the conversation identifier, generated text, and sources
      * @throws ConversationNotFoundException if a supplied conversation identifier is unknown
+     * @throws ContextBudgetExceededException if the final prompt exceeds its configured budget
      * @throws AiProviderException if the model call returns no content or fails
      */
     public ChatResponse chat(String conversationId, String message) {
@@ -107,8 +118,19 @@ public class AiChatService {
                         history
                 );
                 String augmentedMessage = addKnowledgeContext(message, relevantKnowledge);
+                String systemPrompt = buildSystemPrompt(memory.summary());
+                int estimatedTokens = tokenBudgetService.estimatePromptTokens(
+                        systemPrompt,
+                        memory.recentMessages(),
+                        augmentedMessage
+                );
+                if (!tokenBudgetService.fitsBudget(estimatedTokens, maxInputTokens)) {
+                    throw new ContextBudgetExceededException(
+                            "Final chat context exceeds the configured token budget"
+                    );
+                }
                 String response = chatClient.prompt()
-                        .system(buildSystemPrompt(memory.summary()))
+                        .system(systemPrompt)
                         .messages(memory.recentMessages())
                         .user(augmentedMessage)
                         .tools(ticketTools, ticketPriorityTools)
@@ -126,7 +148,7 @@ public class AiChatService {
                         response,
                         extractSources(relevantKnowledge)
                 );
-            } catch (AiProviderException exception) {
+            } catch (AiProviderException | ContextBudgetExceededException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
                 throw new AiProviderException("AI chat request failed", exception);

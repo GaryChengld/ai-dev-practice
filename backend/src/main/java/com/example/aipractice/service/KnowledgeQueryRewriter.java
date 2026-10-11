@@ -18,8 +18,6 @@ import java.util.List;
 public class KnowledgeQueryRewriter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KnowledgeQueryRewriter.class);
-    private static final int MESSAGE_OVERHEAD_TOKENS = 8;
-
     private final ChatClient chatClient;
     private final AiPrompts prompts;
     private final TokenBudgetService tokenBudgetService;
@@ -63,11 +61,11 @@ public class KnowledgeQueryRewriter {
                 "{{conversationSummary}}",
                 conversationSummary == null ? "" : conversationSummary
         );
-        int estimatedTokens = tokenBudgetService.estimateTokens(rewriterPrompt)
-                + MESSAGE_OVERHEAD_TOKENS
-                + tokenBudgetService.estimateTokens(recentHistory)
-                + tokenBudgetService.estimateTokens(message)
-                + MESSAGE_OVERHEAD_TOKENS;
+        int estimatedTokens = tokenBudgetService.estimatePromptTokens(
+                rewriterPrompt,
+                recentHistory,
+                message
+        );
 
         if (!tokenBudgetService.fitsBudget(estimatedTokens, maxInputTokens)) {
             LOGGER.info(

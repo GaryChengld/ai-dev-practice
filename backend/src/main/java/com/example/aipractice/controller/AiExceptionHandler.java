@@ -3,6 +3,7 @@ package com.example.aipractice.controller;
 import com.example.aipractice.dto.ApiError;
 import com.example.aipractice.exception.AiProviderException;
 import com.example.aipractice.exception.ConversationNotFoundException;
+import com.example.aipractice.exception.ContextBudgetExceededException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +14,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class AiExceptionHandler {
+
+    /**
+     * Maps an oversized final chat context to an HTTP 422 response.
+     *
+     * @param exception context-budget exception raised before calling the provider
+     * @return structured API error response
+     */
+    @ExceptionHandler(ContextBudgetExceededException.class)
+    public ResponseEntity<ApiError> handleContextBudgetExceeded(
+            ContextBudgetExceededException exception
+    ) {
+        return ResponseEntity.unprocessableEntity()
+                .body(new ApiError(
+                        "CONTEXT_BUDGET_EXCEEDED",
+                        "Conversation context is too large."
+                ));
+    }
 
     /**
      * Maps an unknown conversation to an HTTP 404 response.
