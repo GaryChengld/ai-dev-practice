@@ -13,6 +13,8 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -32,6 +34,7 @@ public class AiChatService {
     private final AiPrompts prompts;
     private final TicketTools ticketTools;
     private final TicketPriorityTools ticketPriorityTools;
+    private final List<ToolCallback> toolCallbacks;
     private final KnowledgeService knowledgeService;
     private final KnowledgeQueryRewriter queryRewriter;
     private final ConversationContextManager contextManager;
@@ -72,6 +75,7 @@ public class AiChatService {
         this.prompts = prompts;
         this.ticketTools = ticketTools;
         this.ticketPriorityTools = ticketPriorityTools;
+        this.toolCallbacks = List.of(ToolCallbacks.from(ticketTools, ticketPriorityTools));
         this.knowledgeService = knowledgeService;
         this.queryRewriter = queryRewriter;
         this.contextManager = contextManager;
@@ -122,7 +126,8 @@ public class AiChatService {
                 int estimatedTokens = tokenBudgetService.estimatePromptTokens(
                         systemPrompt,
                         memory.recentMessages(),
-                        augmentedMessage
+                        augmentedMessage,
+                        toolCallbacks
                 );
                 if (!tokenBudgetService.fitsBudget(estimatedTokens, maxInputTokens)) {
                     throw new ContextBudgetExceededException(

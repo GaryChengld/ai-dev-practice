@@ -3,10 +3,14 @@ package com.example.aipractice.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TokenBudgetServiceTests {
 
@@ -39,6 +43,25 @@ class TokenBudgetServiceTests {
         );
 
         assertThat(estimate).isEqualTo(30);
+    }
+
+    @Test
+    void includesToolNamesDescriptionsAndInputSchemasInPromptEstimate() {
+        ToolDefinition definition = mock(ToolDefinition.class);
+        when(definition.name()).thenReturn("lookup");
+        when(definition.description()).thenReturn("Find item");
+        when(definition.inputSchema()).thenReturn("{}");
+        ToolCallback callback = mock(ToolCallback.class);
+        when(callback.getToolDefinition()).thenReturn(definition);
+
+        int estimate = tokenBudgetService.estimatePromptTokens(
+                "abc",
+                List.of(new AssistantMessage("abcdef")),
+                "abcdefghi",
+                List.of(callback)
+        );
+
+        assertThat(estimate).isEqualTo(44);
     }
 
     @Test

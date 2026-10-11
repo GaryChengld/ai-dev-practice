@@ -1,6 +1,7 @@
 package com.example.aipractice.service;
 
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.List;
 public class TokenBudgetService {
 
     private static final int MESSAGE_OVERHEAD_TOKENS = 8;
+    private static final int TOOL_DEFINITION_OVERHEAD_TOKENS = 8;
 
     /**
      * Estimates tokens using the exercise's three-characters-per-token heuristic.
@@ -56,11 +58,50 @@ public class TokenBudgetService {
             List<Message> history,
             String userMessage
     ) {
+        return estimatePromptTokens(systemPrompt, history, userMessage, List.of());
+    }
+
+    /**
+     * Estimates a complete prompt, including registered tool definitions.
+     * Provider-specific formatting around those definitions is not included.
+     *
+     * @param systemPrompt rendered system prompt
+     * @param history conversation messages between the system and user messages
+     * @param userMessage current user message, including any retrieved knowledge
+     * @param toolCallbacks tools exposed to the model
+     * @return estimated input token count
+     */
+    public int estimatePromptTokens(
+            String systemPrompt,
+            List<Message> history,
+            String userMessage,
+            List<ToolCallback> toolCallbacks
+    ) {
         return estimateTokens(systemPrompt)
                 + MESSAGE_OVERHEAD_TOKENS
                 + estimateTokens(history)
                 + estimateTokens(userMessage)
-                + MESSAGE_OVERHEAD_TOKENS;
+                + MESSAGE_OVERHEAD_TOKENS
+                + estimateToolTokens(toolCallbacks);
+    }
+
+    /**
+     * Estimates tool names, descriptions, JSON input schemas, and definition overhead.
+     *
+     * @param toolCallbacks tools exposed to the model
+     * @return estimated tool-definition token count
+     */
+    public int estimateToolTokens(List<ToolCallback> toolCallbacks) {
+        if (toolCallbacks == null || toolCallbacks.isEmpty()) {
+            return 0;
+        }
+        return toolCallbacks.stream()
+                .map(ToolCallback::getToolDefinition)
+                .mapToInt(definition -> estimateTokens(definition.name())
+                        + estimateTokens(definition.description())
+                        + estimateTokens(definition.inputSchema())
+                        + TOOL_DEFINITION_OVERHEAD_TOKENS)
+                .sum();
     }
 
     /**

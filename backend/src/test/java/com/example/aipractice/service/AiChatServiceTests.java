@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -507,6 +508,104 @@ class AiChatServiceTests {
                 .isInstanceOf(ContextBudgetExceededException.class)
                 .hasMessage("Final chat context exceeds the configured token budget");
         verify(chatModel, never()).call(any(Prompt.class));
+    }
+
+    @Test
+    void preservesFallbackHistoryAndRetriesCompactionAfterBudgetRejection() {
+        TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
+        when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
+                .thenReturn(100);
+        when(controlledBudget.fitsBudget(anyInt(), eq(8_000)))
+                .thenReturn(true, true, true, true, true, true, true, false, true);
+        AiChatService controlledService = new AiChatService(
+                ChatClient.create(chatModel),
+                prompts,
+                new TicketTools(ticketService),
+                new TicketPriorityTools(ticketService),
+                knowledgeService,
+                queryRewriter,
+                new ConversationContextManager(),
+                summaryService,
+                controlledBudget,
+                new AiContextProperties(2_000, 8_000)
+        );
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+        when(queryRewriter.rewrite(anyString(), anyString(), any()))
+                .thenReturn("Standalone query");
+        when(summaryService.summarize(eq(""), any()))
+                .thenReturn("Summary covering M1-M8");
+        when(summaryService.summarize(eq("Summary covering M1-M8"), any()))
+                .thenThrow(new AiProviderException("Summarizer unavailable"))
+                .thenReturn("Summary covering M1-M10");
+
+        ChatResponse response = controlledService.chat(null, "Question 1");
+        for (int questionNumber = 2; questionNumber <= 7; questionNumber++) {
+            response = controlledService.chat(
+                    response.conversationId(),
+                    "Question " + questionNumber
+            );
+        }
+
+        String conversationId = response.conversationId();
+        assertThatThrownBy(() -> controlledService.chat(conversationId, "Question 8"))
+                .isInstanceOf(ContextBudgetExceededException.class);
+        verify(chatModel, times(7)).call(any(Prompt.class));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> fallbackHistoryCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(controlledBudget, times(8)).estimatePromptTokens(
+                anyString(),
+                fallbackHistoryCaptor.capture(),
+                anyString(),
+                any()
+        );
+        assertThat(fallbackHistoryCaptor.getAllValues().get(7))
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Question 5",
+                        "Answer",
+                        "Question 6",
+                        "Answer",
+                        "Question 7",
+                        "Answer"
+                );
+
+        controlledService.chat(conversationId, "Question 8");
+        verify(chatModel, times(8)).call(any(Prompt.class));
+
+        ArgumentCaptor<String> rewriteSummaryCaptor = ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> rewriteHistoryCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(queryRewriter, times(8)).rewrite(
+                anyString(),
+                rewriteSummaryCaptor.capture(),
+                rewriteHistoryCaptor.capture()
+        );
+        assertThat(rewriteSummaryCaptor.getAllValues().subList(6, 8))
+                .containsExactly("Summary covering M1-M8", "Summary covering M1-M8");
+        assertThat(rewriteHistoryCaptor.getAllValues().subList(6, 8))
+                .allSatisfy(messages -> assertThat(messages)
+                        .extracting(Message::getText)
+                        .containsExactly(
+                                "Question 5",
+                                "Answer",
+                                "Question 6",
+                                "Answer",
+                                "Question 7",
+                                "Answer"
+                        ));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> compactionCaptor = ArgumentCaptor.forClass(List.class);
+        verify(summaryService, times(3)).summarize(anyString(), compactionCaptor.capture());
+        assertThat(compactionCaptor.getAllValues().get(1))
+                .extracting(Message::getText)
+                .containsExactly("Question 5", "Answer");
+        assertThat(compactionCaptor.getAllValues().get(2))
+                .extracting(Message::getText)
+                .containsExactly("Question 5", "Answer");
     }
 
     private org.springframework.ai.chat.model.ChatResponse modelResponse(String text) {
