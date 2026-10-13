@@ -149,12 +149,14 @@ class AiChatServiceTests {
     void returnsSourcesOnlyForKnowledgeSelectedWithinTheBudget() {
         TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
         when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
-                .thenReturn(7_900, 8_000);
+                .thenReturn(7_500, 8_000);
         when(controlledBudget.fitsBudget(8_000, 8_000)).thenReturn(true);
-        String selectedText = "A".repeat(30);
-        String omittedText = "B".repeat(300);
-        when(controlledBudget.estimateTokens(selectedText)).thenReturn(10);
-        when(controlledBudget.estimateTokens(omittedText)).thenReturn(100);
+        String omittedText = "A".repeat(300);
+        String selectedTextB = "B".repeat(90);
+        String selectedTextC = "C".repeat(60);
+        when(controlledBudget.estimateTokens(omittedText)).thenReturn(1_000);
+        when(controlledBudget.estimateTokens(selectedTextB)).thenReturn(300);
+        when(controlledBudget.estimateTokens(selectedTextC)).thenReturn(200);
         AiChatService controlledService = new AiChatService(
                 ChatClient.create(chatModel),
                 prompts,
@@ -170,23 +172,27 @@ class AiChatServiceTests {
         );
         when(knowledgeService.search("Question")).thenReturn(List.of(
                 new Document(
-                        selectedText,
-                        Map.of(KnowledgeMetadata.SOURCE, "selected.md")
-                ),
-                new Document(
                         omittedText,
                         Map.of(KnowledgeMetadata.SOURCE, "omitted.md")
+                ),
+                new Document(
+                        selectedTextB,
+                        Map.of(KnowledgeMetadata.SOURCE, "selected-b.md")
+                ),
+                new Document(
+                        selectedTextC,
+                        Map.of(KnowledgeMetadata.SOURCE, "selected-c.md")
                 )
         ));
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
 
         ChatResponse response = controlledService.chat(null, "Question");
 
-        assertThat(response.sources()).containsExactly("selected.md");
+        assertThat(response.sources()).containsExactly("selected-b.md", "selected-c.md");
         ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(promptCaptor.capture());
         assertThat(promptCaptor.getValue().getInstructions().get(1).getText())
-                .contains(selectedText)
+                .contains(selectedTextB, selectedTextC)
                 .doesNotContain(omittedText);
     }
 
@@ -560,7 +566,7 @@ class AiChatServiceTests {
         assertThatThrownBy(() -> budgetConstrainedService.chat(null, "Hello"))
                 .isInstanceOf(ContextBudgetExceededException.class)
                 .hasMessage("Final chat context exceeds the configured token budget");
-        verify(ragContextBudgetService, never()).selectDocuments(any(), anyInt());
+        verify(ragContextBudgetService, never()).selectByValueDensity(any(), anyInt());
         verify(chatModel, never()).call(any(Prompt.class));
     }
 

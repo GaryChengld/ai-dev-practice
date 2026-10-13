@@ -24,8 +24,12 @@ class RagContextBudgetServiceTests {
         when(tokenBudgetService.estimateTokens("Document B")).thenReturn(1_000);
         when(tokenBudgetService.estimateTokens("Document C")).thenReturn(500);
 
-        List<Document> selected = service.selectDocuments(
-                List.of(documentA, documentB, documentC),
+        List<Document> selected = service.selectByValueDensity(
+                List.of(
+                        new RankedDocument(documentA, 0.95, 0),
+                        new RankedDocument(documentB, 0.90, 1),
+                        new RankedDocument(documentC, 0.85, 2)
+                ),
                 3_000
         );
 
@@ -33,19 +37,23 @@ class RagContextBudgetServiceTests {
     }
 
     @Test
-    void skipsDocumentsThatDoNotFitAndPreservesOrder() {
+    void selectsHigherValueDensityAndReturnsDocumentsInRetrievalOrder() {
         Document documentA = new Document("Document A");
         Document documentB = new Document("Document B");
         Document documentC = new Document("Document C");
-        when(tokenBudgetService.estimateTokens("Document A")).thenReturn(1_200);
-        when(tokenBudgetService.estimateTokens("Document B")).thenReturn(1_000);
-        when(tokenBudgetService.estimateTokens("Document C")).thenReturn(700);
+        when(tokenBudgetService.estimateTokens("Document A")).thenReturn(1_000);
+        when(tokenBudgetService.estimateTokens("Document B")).thenReturn(600);
+        when(tokenBudgetService.estimateTokens("Document C")).thenReturn(500);
 
-        List<Document> selected = service.selectDocuments(
-                List.of(documentA, documentB, documentC),
-                2_000
+        List<Document> selected = service.selectByValueDensity(
+                List.of(
+                        new RankedDocument(documentA, 0.95, 0),
+                        new RankedDocument(documentB, 0.90, 1),
+                        new RankedDocument(documentC, 0.85, 2)
+                ),
+                1_200
         );
 
-        assertThat(selected).containsExactly(documentA, documentC);
+        assertThat(selected).containsExactly(documentB, documentC);
     }
 }

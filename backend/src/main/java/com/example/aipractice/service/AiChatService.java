@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 /**
  * Coordinates AI chat requests and builds application response payloads.
@@ -138,10 +139,14 @@ public class AiChatService {
                             "Final chat context exceeds the configured token budget"
                     );
                 }
-                List<Document> selectedKnowledge = ragContextBudgetService.selectDocuments(
-                        relevantKnowledge,
-                        availableRagTokens
+                List<RankedDocument> rankedKnowledge = buildRankedDocuments(
+                        relevantKnowledge
                 );
+                List<Document> selectedKnowledge =
+                        ragContextBudgetService.selectByValueDensity(
+                                rankedKnowledge,
+                                availableRagTokens
+                        );
                 String augmentedMessage = addKnowledgeContext(message, selectedKnowledge);
                 int estimatedTokens = tokenBudgetService.estimatePromptTokens(
                         systemPrompt,
@@ -254,6 +259,16 @@ public class AiChatService {
                 .map(String.class::cast)
                 .filter(source -> !source.isBlank())
                 .distinct()
+                .toList();
+    }
+
+    private List<RankedDocument> buildRankedDocuments(List<Document> documents) {
+        return IntStream.range(0, documents.size())
+                .mapToObj(index -> new RankedDocument(
+                        documents.get(index),
+                        1.0 / (index + 1),
+                        index
+                ))
                 .toList();
     }
 

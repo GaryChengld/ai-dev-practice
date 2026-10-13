@@ -4,6 +4,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -19,27 +20,45 @@ public class RagContextBudgetService {
     }
 
     /**
-     * Greedily selects documents in retrieval order, skipping documents that do not fit.
+     * Selects documents by estimated relevance per token, then restores retrieval order.
      *
-     * @param documents documents ordered from most to least relevant
+     * @param documents retrieved documents with relevance and original position
      * @param availableTokens token budget available for document text
-     * @return an immutable list of selected documents in their original order
+     * @return selected documents in their original retrieval order
      */
-    public List<Document> selectDocuments(
-            List<Document> documents,
+    public List<Document> selectByValueDensity(
+            List<RankedDocument> documents,
             int availableTokens
     ) {
-        List<Document> selected = new ArrayList<>();
+        List<RankedDocument> prioritized = documents.stream()
+                .sorted(Comparator.comparingDouble(
+                        this::valueDensity
+                ).reversed())
+                .toList();
+
+        List<RankedDocument> selected = new ArrayList<>();
         int usedTokens = 0;
 
-        for (Document document : documents) {
-            int documentTokens = tokenBudgetService.estimateTokens(document.getText());
+        for (RankedDocument ranked : prioritized) {
+            int documentTokens = tokenBudgetService.estimateTokens(
+                    ranked.document().getText()
+            );
             if (usedTokens + documentTokens <= availableTokens) {
-                selected.add(document);
+                selected.add(ranked);
                 usedTokens += documentTokens;
             }
         }
 
-        return List.copyOf(selected);
+        return selected.stream()
+                .sorted(Comparator.comparingInt(RankedDocument::originalIndex))
+                .map(RankedDocument::document)
+                .toList();
+    }
+
+    private double valueDensity(RankedDocument ranked) {
+        int estimatedTokens = tokenBudgetService.estimateTokens(
+                ranked.document().getText()
+        );
+        return ranked.relevance() / Math.max(1, estimatedTokens);
     }
 }
