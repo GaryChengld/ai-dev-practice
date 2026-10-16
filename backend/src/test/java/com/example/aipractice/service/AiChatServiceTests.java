@@ -197,6 +197,88 @@ class AiChatServiceTests {
     }
 
     @Test
+    void usesRealSimilarityScoresToSelectKnowledgeWithinTheBudget() {
+        TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
+        when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
+                .thenReturn(6_900, 8_000);
+        when(controlledBudget.fitsBudget(8_000, 8_000)).thenReturn(true);
+        String textA = "A";
+        String textB = "B";
+        String textC = "C";
+        when(controlledBudget.estimateTokens(textA)).thenReturn(900);
+        when(controlledBudget.estimateTokens(textB)).thenReturn(600);
+        when(controlledBudget.estimateTokens(textC)).thenReturn(500);
+        AiChatService controlledService = new AiChatService(
+                ChatClient.create(chatModel),
+                prompts,
+                new TicketTools(ticketService),
+                new TicketPriorityTools(ticketService),
+                knowledgeService,
+                queryRewriter,
+                new ConversationContextManager(),
+                summaryService,
+                controlledBudget,
+                new RagContextBudgetService(controlledBudget),
+                new AiContextProperties(2_000, 8_000)
+        );
+        when(knowledgeService.search("Question")).thenReturn(List.of(
+                scoredDocument(textA, "a.md", 0.91),
+                scoredDocument(textB, "b.md", 0.90),
+                scoredDocument(textC, "c.md", 0.89)
+        ));
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
+
+        ChatResponse response = controlledService.chat(null, "Question");
+
+        assertThat(response.sources()).containsExactly("b.md", "c.md");
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel).call(promptCaptor.capture());
+        assertThat(promptCaptor.getValue().getInstructions().get(1).getText())
+                .contains(textB, textC)
+                .doesNotContain("<knowledge-context>\n" + textA + "\n");
+    }
+
+    @Test
+    void fallsBackToRankScoresWhenAnySimilarityScoreIsMissing() {
+        List<Document> documents = List.of(
+                scoredDocument("A", "a.md", 0.95),
+                new Document("B", Map.of(KnowledgeMetadata.SOURCE, "b.md")),
+                scoredDocument("C", "c.md", 0.85)
+        );
+
+        List<RankedDocument> ranked = service.buildRankedDocuments(documents);
+
+        assertThat(ranked)
+                .extracting(RankedDocument::relevance)
+                .containsExactly(1.0, 0.5, 1.0 / 3.0);
+        assertThat(ranked)
+                .extracting(RankedDocument::originalIndex)
+                .containsExactly(0, 1, 2);
+    }
+
+    @Test
+    void fallsBackToRankScoresWhenAnySimilarityScoreIsInvalid() {
+        List<Double> invalidScores = List.of(
+                Double.NaN,
+                Double.POSITIVE_INFINITY,
+                -0.01,
+                1.01
+        );
+
+        for (Double invalidScore : invalidScores) {
+            List<Document> documents = List.of(
+                    scoredDocument("A", "a.md", 0.95),
+                    scoredDocument("B", "b.md", invalidScore),
+                    scoredDocument("C", "c.md", 0.85)
+            );
+
+            assertThat(service.buildRankedDocuments(documents))
+                    .extracting(RankedDocument::relevance)
+                    .containsExactly(1.0, 0.5, 1.0 / 3.0);
+        }
+    }
+
+    @Test
     void delegatesKnowledgeRetrievalToKnowledgeService() {
         String message = "Question requiring categorized knowledge";
         when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("Answer"));
@@ -667,6 +749,14 @@ class AiChatServiceTests {
         assertThat(compactionCaptor.getAllValues().get(2))
                 .extracting(Message::getText)
                 .containsExactly("Question 5", "Answer");
+    }
+
+    private Document scoredDocument(String text, String source, double score) {
+        return Document.builder()
+                .text(text)
+                .metadata(KnowledgeMetadata.SOURCE, source)
+                .score(score)
+                .build();
     }
 
     private org.springframework.ai.chat.model.ChatResponse modelResponse(String text) {

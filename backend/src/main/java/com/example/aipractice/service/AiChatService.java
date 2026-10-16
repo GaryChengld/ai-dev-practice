@@ -262,13 +262,24 @@ public class AiChatService {
                 .toList();
     }
 
-    private List<RankedDocument> buildRankedDocuments(List<Document> documents) {
+    List<RankedDocument> buildRankedDocuments(List<Document> documents) {
+        boolean useSimilarityScores = documents.stream()
+                .allMatch(document -> {
+                    Double score = document.getScore();
+                    return score != null
+                            && Double.isFinite(score)
+                            && score >= 0.0
+                            && score <= 1.0;
+                });
+
         return IntStream.range(0, documents.size())
-                .mapToObj(index -> new RankedDocument(
-                        documents.get(index),
-                        1.0 / (index + 1),
-                        index
-                ))
+                .mapToObj(index -> {
+                    Document document = documents.get(index);
+                    double relevance = useSimilarityScores
+                            ? document.getScore()
+                            : 1.0 / (index + 1);
+                    return new RankedDocument(document, relevance, index);
+                })
                 .toList();
     }
 
