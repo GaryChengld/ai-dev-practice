@@ -5,8 +5,8 @@ import org.springframework.ai.document.Document;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -19,36 +19,37 @@ class RagDocumentSelectionEvaluationTests {
             new RagContextBudgetService(tokenBudgetService);
 
     @Test
-    void comparesRetrievalOrderAndValueDensityAgainstLabeledCases() {
-        RagEvaluationCase valueDensityWins = new RagEvaluationCase(
+    void comparesRetrievalOrderRankDensityAndSimilarityDensityAgainstLabeledCases() {
+        RagEvaluationCase similarityDensityWins = new RagEvaluationCase(
                 "Ticket escalation policy",
                 List.of(
-                        rankedDocument("A", 1_000, 0.95, 0),
+                        rankedDocument("A", 900, 0.95, 0),
                         rankedDocument("B", 600, 0.90, 1),
                         rankedDocument("C", 500, 0.85, 2)
                 ),
                 1_100,
                 Set.of("B", "C")
         );
-        RagEvaluationCase retrievalOrderWins = new RagEvaluationCase(
+        RagEvaluationCase retrievalOrderAndRankDensityWin = new RagEvaluationCase(
                 "Specialized troubleshooting",
                 List.of(
-                        rankedDocument("A", 900, 0.95, 0),
-                        rankedDocument("B", 600, 0.90, 1),
-                        rankedDocument("C", 500, 0.85, 2),
-                        rankedDocument("D", 400, 0.70, 3)
+                        rankedDocument("A", 850, 0.99, 0),
+                        rankedDocument("B", 550, 0.96, 1),
+                        rankedDocument("C", 450, 0.94, 2)
                 ),
                 1_000,
                 Set.of("A")
         );
 
-        StrategyComparison first = evaluate(valueDensityWins);
-        StrategyComparison second = evaluate(retrievalOrderWins);
+        StrategyComparison first = evaluate(similarityDensityWins);
+        StrategyComparison second = evaluate(retrievalOrderAndRankDensityWin);
 
-        assertMetrics(first.retrievalOrder(), List.of("A"), 0.0, 1_000, 10.0 / 11.0);
-        assertMetrics(first.valueDensity(), List.of("B", "C"), 1.0, 1_100, 1.0);
-        assertMetrics(second.retrievalOrder(), List.of("A"), 1.0, 900, 0.9);
-        assertMetrics(second.valueDensity(), List.of("C", "D"), 0.0, 900, 0.9);
+        assertMetrics(first.retrievalOrder(), List.of("A"), 0.0, 900, 9.0 / 11.0);
+        assertMetrics(first.rankDensity(), List.of("A"), 0.0, 900, 9.0 / 11.0);
+        assertMetrics(first.similarityDensity(), List.of("B", "C"), 1.0, 1_100, 1.0);
+        assertMetrics(second.retrievalOrder(), List.of("A"), 1.0, 850, 0.85);
+        assertMetrics(second.rankDensity(), List.of("A"), 1.0, 850, 0.85);
+        assertMetrics(second.similarityDensity(), List.of("B", "C"), 0.0, 1_000, 1.0);
 
         report(first);
         report(second);
@@ -91,8 +92,12 @@ class RagDocumentSelectionEvaluationTests {
                 testCase.documents(),
                 testCase.tokenBudget()
         );
-        List<Document> valueDensity = ragContextBudgetService.selectByValueDensity(
-                testCase.documents(),
+        List<Document> rankDensity = ragContextBudgetService.selectByValueDensity(
+                withRankScores(testCase.documents()),
+                testCase.tokenBudget()
+        );
+        List<Document> similarityDensity = ragContextBudgetService.selectByValueDensity(
+                withSimilarityScores(testCase.documents()),
                 testCase.tokenBudget()
         );
 
@@ -100,8 +105,45 @@ class RagDocumentSelectionEvaluationTests {
                 testCase.name(),
                 testCase.tokenBudget(),
                 metrics(retrievalOrder, testCase),
-                metrics(valueDensity, testCase)
+                metrics(rankDensity, testCase),
+                metrics(similarityDensity, testCase)
         );
+    }
+
+    private List<RankedDocument> withRankScores(
+            List<RankedDocument> documents
+    ) {
+        return IntStream.range(0, documents.size())
+                .mapToObj(index -> new RankedDocument(
+                        documents.get(index).document(),
+                        1.0 / (index + 1),
+                        index
+                ))
+                .toList();
+    }
+
+    private List<RankedDocument> withSimilarityScores(
+            List<RankedDocument> documents
+    ) {
+        return documents.stream()
+                .map(ranked -> {
+                    Double score = ranked.document().getScore();
+                    if (score == null
+                            || !Double.isFinite(score)
+                            || score < 0.0
+                            || score > 1.0) {
+                        throw new IllegalArgumentException(
+                                "Evaluation requires valid similarity scores"
+                        );
+                    }
+
+                    return new RankedDocument(
+                            ranked.document(),
+                            score,
+                            ranked.originalIndex()
+                    );
+                })
+                .toList();
     }
 
     private List<Document> selectByRetrievalOrder(
@@ -192,10 +234,11 @@ class RagDocumentSelectionEvaluationTests {
             double relevance,
             int originalIndex
     ) {
-        Document document = new Document(
-                "x".repeat(tokens * 3),
-                Map.of(KnowledgeMetadata.SOURCE, id)
-        );
+        Document document = Document.builder()
+                .text("x".repeat(tokens * 3))
+                .metadata(KnowledgeMetadata.SOURCE, id)
+                .score(relevance)
+                .build();
         return new RankedDocument(document, relevance, originalIndex);
     }
 
@@ -226,13 +269,17 @@ class RagDocumentSelectionEvaluationTests {
                 Retrieval Order:
                   %s
 
-                Value Density:
+                Rank Density:
+                  %s
+
+                Similarity Density:
                   %s
                 """.formatted(
                         comparison.name(),
                         comparison.tokenBudget(),
                         format(comparison.retrievalOrder()),
-                        format(comparison.valueDensity())
+                        format(comparison.rankDensity()),
+                        format(comparison.similarityDensity())
                 )
         );
     }
@@ -262,7 +309,8 @@ class RagDocumentSelectionEvaluationTests {
             String name,
             int tokenBudget,
             EvaluationMetrics retrievalOrder,
-            EvaluationMetrics valueDensity
+            EvaluationMetrics rankDensity,
+            EvaluationMetrics similarityDensity
     ) {
     }
 }
