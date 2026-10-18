@@ -14,6 +14,9 @@ import static org.assertj.core.data.Offset.offset;
 
 class RagDocumentSelectionEvaluationTests {
 
+    private static final List<Double> HYBRID_WEIGHTS =
+            List.of(0.0, 0.25, 0.5, 0.75, 1.0);
+
     private final TokenBudgetService tokenBudgetService = new TokenBudgetService();
     private final RagContextBudgetService ragContextBudgetService =
             new RagContextBudgetService(tokenBudgetService);
@@ -53,6 +56,70 @@ class RagDocumentSelectionEvaluationTests {
 
         report(first);
         report(second);
+    }
+
+    @Test
+    void comparesHybridScoringWeightsWhenSimilarityDensityWins() {
+        RagEvaluationCase testCase = new RagEvaluationCase(
+                "Hybrid scoring evaluation",
+                List.of(
+                        rankedDocument("A", 900, 0.95, 0),
+                        rankedDocument("B", 600, 0.90, 1),
+                        rankedDocument("C", 500, 0.85, 2)
+                ),
+                1_100,
+                Set.of("B", "C")
+        );
+
+        List<List<String>> expectedSelections = List.of(
+                List.of("A"),
+                List.of("A"),
+                List.of("B", "C"),
+                List.of("B", "C"),
+                List.of("B", "C")
+        );
+        List<Double> expectedRecall = List.of(0.0, 0.0, 1.0, 1.0, 1.0);
+
+        compareHybridWeights(testCase, expectedSelections, expectedRecall);
+    }
+
+    @Test
+    void comparesHybridScoringWeightsWhenRankDensityWins() {
+        RagEvaluationCase testCase = new RagEvaluationCase(
+                "Specialized troubleshooting",
+                List.of(
+                        rankedDocument("A", 850, 0.99, 0),
+                        rankedDocument("B", 550, 0.96, 1),
+                        rankedDocument("C", 450, 0.94, 2)
+                ),
+                1_000,
+                Set.of("A")
+        );
+
+        List<List<String>> expectedSelections = List.of(
+                List.of("A"),
+                List.of("A"),
+                List.of("B", "C"),
+                List.of("B", "C"),
+                List.of("B", "C")
+        );
+        List<Double> expectedRecall = List.of(1.0, 1.0, 0.0, 0.0, 0.0);
+
+        compareHybridWeights(testCase, expectedSelections, expectedRecall);
+    }
+
+    @Test
+    void rejectsInvalidHybridScoringWeights() {
+        List<RankedDocument> documents = List.of(
+                rankedDocument("A", 100, 0.95, 0)
+        );
+
+        for (double alpha : List.of(-0.01, 1.01, Double.NaN,
+                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY)) {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> withHybridScores(documents, alpha))
+                    .withMessage("Alpha must be between 0 and 1");
+        }
     }
 
     @Test
@@ -144,6 +211,64 @@ class RagDocumentSelectionEvaluationTests {
                     );
                 })
                 .toList();
+    }
+
+    private List<RankedDocument> withHybridScores(
+            List<RankedDocument> documents,
+            double alpha
+    ) {
+        if (!Double.isFinite(alpha) || alpha < 0.0 || alpha > 1.0) {
+            throw new IllegalArgumentException("Alpha must be between 0 and 1");
+        }
+
+        List<RankedDocument> rankScores = withRankScores(documents);
+        List<RankedDocument> similarityScores = withSimilarityScores(documents);
+
+        return IntStream.range(0, documents.size())
+                .mapToObj(index -> {
+                    RankedDocument ranked = documents.get(index);
+                    double rankScore = rankScores.get(index).relevance();
+                    double similarityScore = similarityScores.get(index).relevance();
+                    double hybridScore = alpha * similarityScore
+                            + (1.0 - alpha) * rankScore;
+
+                    return new RankedDocument(
+                            ranked.document(),
+                            hybridScore,
+                            ranked.originalIndex()
+                    );
+                })
+                .toList();
+    }
+
+    private void compareHybridWeights(
+            RagEvaluationCase testCase,
+            List<List<String>> expectedSelections,
+            List<Double> expectedRecall
+    ) {
+        for (int index = 0; index < HYBRID_WEIGHTS.size(); index++) {
+            double alpha = HYBRID_WEIGHTS.get(index);
+            List<Document> selected = ragContextBudgetService.selectByValueDensity(
+                    withHybridScores(testCase.documents(), alpha),
+                    testCase.tokenBudget()
+            );
+            EvaluationMetrics result = metrics(selected, testCase);
+
+            assertThat(result.selectedIds())
+                    .as("selected documents for alpha %.2f", alpha)
+                    .containsExactlyElementsOf(expectedSelections.get(index));
+            assertThat(result.recall())
+                    .as("recall for alpha %.2f", alpha)
+                    .isEqualTo(expectedRecall.get(index));
+
+            System.out.printf(
+                    "Case: %s | Alpha: %.2f | Selected: %s | Recall: %.0f%%%n",
+                    testCase.name(),
+                    alpha,
+                    String.join(", ", result.selectedIds()),
+                    result.recall() * 100
+            );
+        }
     }
 
     private List<Document> selectByRetrievalOrder(
