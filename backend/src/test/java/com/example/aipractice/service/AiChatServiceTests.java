@@ -239,6 +239,84 @@ class AiChatServiceTests {
     }
 
     @Test
+    void integratesQueryRewritingBudgetSelectionAndSourceAttribution() {
+        TokenBudgetService controlledBudget = mock(TokenBudgetService.class);
+        when(controlledBudget.estimatePromptTokens(anyString(), any(), anyString(), any()))
+                .thenReturn(6_900, 8_000, 6_900, 8_000);
+        when(controlledBudget.fitsBudget(8_000, 8_000)).thenReturn(true);
+        AiChatService controlledService = new AiChatService(
+                ChatClient.create(chatModel),
+                prompts,
+                new TicketTools(ticketService),
+                new TicketPriorityTools(ticketService),
+                knowledgeService,
+                queryRewriter,
+                new ConversationContextManager(),
+                summaryService,
+                controlledBudget,
+                new RagContextBudgetService(controlledBudget),
+                new AiContextProperties(2_000, 8_000)
+        );
+
+        String largeText = "LARGE_DOCUMENT";
+        String timingText = "Approved refunds take 3-5 business days.";
+        String methodText = "Refunds are returned to the original payment method.";
+        when(controlledBudget.estimateTokens(largeText)).thenReturn(900);
+        when(controlledBudget.estimateTokens(timingText)).thenReturn(600);
+        when(controlledBudget.estimateTokens(methodText)).thenReturn(500);
+        when(knowledgeService.search("Tell me about approved refunds."))
+                .thenReturn(List.of());
+        when(queryRewriter.rewrite(eq("How long do they take?"), eq(""), any()))
+                .thenReturn("How long do approved refunds take?");
+        when(knowledgeService.search("How long do approved refunds take?"))
+                .thenReturn(List.of(
+                        scoredDocument(largeText, "large.md", 0.95),
+                        scoredDocument(timingText, "refund-timing.md", 0.90),
+                        scoredDocument(methodText, "refund-method.md", 0.85)
+                ));
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                modelResponse("I can help with refunds."),
+                modelResponse("Approved refunds take 3-5 business days.")
+        );
+
+        ChatResponse first = controlledService.chat(null, "Tell me about approved refunds.");
+        ChatResponse second = controlledService.chat(
+                first.conversationId(),
+                "How long do they take?"
+        );
+
+        assertThat(second.conversationId()).isEqualTo(first.conversationId());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Message>> historyCaptor = ArgumentCaptor.forClass(List.class);
+        verify(queryRewriter).rewrite(
+                eq("How long do they take?"),
+                eq(""),
+                historyCaptor.capture()
+        );
+        assertThat(historyCaptor.getValue())
+                .extracting(Message::getText)
+                .containsExactly(
+                        "Tell me about approved refunds.",
+                        "I can help with refunds."
+                );
+        verify(knowledgeService).search("How long do approved refunds take?");
+        assertThat(second.message()).isEqualTo("Approved refunds take 3-5 business days.");
+        assertThat(second.sources())
+                .containsExactly("refund-timing.md", "refund-method.md")
+                .doesNotContain("large.md");
+
+        ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(2)).call(promptCaptor.capture());
+        Prompt finalPrompt = promptCaptor.getAllValues().get(1);
+        String finalUserMessage = finalPrompt.getInstructions()
+                .get(finalPrompt.getInstructions().size() - 1)
+                .getText();
+        assertThat(finalUserMessage)
+                .contains(timingText, methodText, "User question:\nHow long do they take?")
+                .doesNotContain(largeText);
+    }
+
+    @Test
     void fallsBackToRankScoresWhenAnySimilarityScoreIsMissing() {
         List<Document> documents = List.of(
                 scoredDocument("A", "a.md", 0.95),
