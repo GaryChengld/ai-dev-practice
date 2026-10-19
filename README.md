@@ -18,6 +18,7 @@ for structured support-ticket analysis.
 - Real vector similarity scores with deterministic rank-based fallback
 - Offline JUnit evaluation of retrieval-order, rank-density,
   similarity-density, and experimental hybrid scoring strategies
+- Deterministic answer evaluation for correctness, faithfulness, and relevance
 
 ## Technology
 
@@ -70,6 +71,9 @@ Final prompt budget validation
      |
      v
 Gemini response + sources actually supplied to the model
+     |
+     v
+Offline answer evaluation using manually labeled facts and claims
 ```
 
 Production document selection uses `similarity / estimated tokens`. If every
@@ -235,12 +239,43 @@ Run only the RAG selection evaluation harness:
 mvn -pl backend -Dtest=RagDocumentSelectionEvaluationTests test
 ```
 
+Run only the RAG answer evaluation harness:
+
+```powershell
+mvn -pl backend -Dtest=RagAnswerEvaluationTests test
+```
+
 The offline harness compares document selection against labeled synthetic
 cases using relevant-document recall, token utilization, and selected-document
 count. It evaluates retrieval order and several relevance-scoring policies
 without calling Gemini. These metrics measure document-selection quality, not
 final answer correctness; higher token utilization alone does not imply a
 better result.
+
+The answer evaluation harness separately measures:
+
+- **Correctness:** expected facts present in the answer divided by all expected
+  facts.
+- **Faithfulness:** answer claims supported by retrieved knowledge divided by
+  all answer claims.
+- **Relevance:** on-topic answer claims divided by all answer claims.
+
+`RagAnswerEvaluationTests` covers a correct and faithful answer, a correct
+answer with an unsupported claim, and a supported but irrelevant answer. Fact
+IDs and claim labels are assigned manually, making the evaluation deterministic
+and independent of Gemini. The harness is a controlled claim-level baseline;
+it does not judge arbitrary natural-language answers semantically.
+
+The project requires Maven 3.6.3 or newer for the normal lifecycle. To run only
+the answer evaluation with Maven 3.6.0, invoke compatible compiler and test
+plugins directly from the backend directory:
+
+```powershell
+cd backend
+mvn org.apache.maven.plugins:maven-compiler-plugin:3.12.1:testCompile `
+    org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test `
+    -Dtest=RagAnswerEvaluationTests
+```
 
 Build the frontend:
 
