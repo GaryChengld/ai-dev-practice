@@ -1,0 +1,97 @@
+package com.example.aipractice.service;
+
+import com.example.aipractice.tools.TicketPriorityTools;
+import com.example.aipractice.tools.TicketTools;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Executes planner decisions with bounded tool access, independently of the chat pipeline.
+ */
+public class TicketAgentService {
+
+    public enum Action {
+        CHECK_STATUS,
+        CHECK_PRIORITY,
+        FINISH
+    }
+
+    public record AgentDecision(Action action, String finalAnswer) {}
+
+    public record AgentStep(Action action, String result) {}
+
+    public record AgentResult(String answer, List<AgentStep> steps, boolean completed) {}
+
+    @FunctionalInterface
+    public interface AgentPlanner {
+        AgentDecision decide(String ticketId, List<AgentStep> previousSteps);
+    }
+
+    private final TicketTools ticketTools;
+    private final TicketPriorityTools priorityTools;
+    private final AgentPlanner planner;
+    private final int maxSteps;
+
+    public TicketAgentService(
+            TicketTools ticketTools,
+            TicketPriorityTools priorityTools,
+            AgentPlanner planner,
+            int maxSteps
+    ) {
+        if (maxSteps <= 0) {
+            throw new IllegalArgumentException("maxSteps must be greater than zero");
+        }
+        this.ticketTools = Objects.requireNonNull(ticketTools, "ticketTools cannot be null");
+        this.priorityTools = Objects.requireNonNull(priorityTools, "priorityTools cannot be null");
+        this.planner = Objects.requireNonNull(planner, "planner cannot be null");
+        this.maxSteps = maxSteps;
+    }
+
+    /**
+     * Runs at most {@code maxSteps} planning decisions, including FINISH.
+     * Only tool executions appear in the immutable result trace.
+     *
+     * @throws IllegalArgumentException when the ticket ID is null or blank
+     * @throws IllegalStateException when priority is requested before the latest
+     *         status check has returned OPEN or IN_PROGRESS
+     */
+    public AgentResult run(String ticketId) {
+        if (ticketId == null || ticketId.isBlank()) {
+            throw new IllegalArgumentException("ticketId cannot be null or blank");
+        }
+
+        List<AgentStep> steps = new ArrayList<>();
+        String latestStatus = null;
+
+        for (int iteration = 0; iteration < maxSteps; iteration++) {
+            AgentDecision decision = planner.decide(ticketId, List.copyOf(steps));
+
+            switch (decision.action()) {
+                case CHECK_STATUS -> {
+                    latestStatus = ticketTools.getTicketStatus(ticketId);
+                    steps.add(new AgentStep(Action.CHECK_STATUS, latestStatus));
+                }
+                case CHECK_PRIORITY -> {
+                    if (!"OPEN".equals(latestStatus) && !"IN_PROGRESS".equals(latestStatus)) {
+                        throw new IllegalStateException(
+                                "Priority requires a previous status check returning OPEN or IN_PROGRESS"
+                        );
+                    }
+                    String priority = priorityTools.getTicketPriority(ticketId);
+                    steps.add(new AgentStep(Action.CHECK_PRIORITY, priority));
+                }
+                case FINISH -> {
+                    return new AgentResult(decision.finalAnswer(), List.copyOf(steps), true);
+                }
+            }
+        }
+
+        return new AgentResult(
+                "Agent stopped: maximum step count reached",
+                List.copyOf(steps),
+                false
+        );
+    }
+}
