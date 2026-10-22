@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param knowledgeQueryRewriter Markdown filename for the knowledge-query rewriter prompt
  * @param conversationSummarizer Markdown filename for the conversation summarizer prompt
  * @param chatSummary Markdown filename for the chat summary-context template
+ * @param ticketAgentPlanner Markdown filename for the ticket-agent planner prompt
  */
 @ConfigurationProperties(prefix = "ai.prompts")
 public record AiPromptProperties(
@@ -19,6 +20,7 @@ public record AiPromptProperties(
         String knowledgeCategoryRouter,
         String knowledgeQueryRewriter,
         String conversationSummarizer,
-        String chatSummary
+        String chatSummary,
+        String ticketAgentPlanner
 ) {
 }

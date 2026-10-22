@@ -54,8 +54,9 @@ public class TicketAgentService {
      * Only tool executions appear in the immutable result trace.
      *
      * @throws IllegalArgumentException when the ticket ID is null or blank
-     * @throws IllegalStateException when priority is requested before the latest
-     *         status check has returned OPEN or IN_PROGRESS
+     * @throws IllegalStateException when the planner returns an invalid decision,
+     *         or priority is requested before the latest status check has returned
+     *         OPEN or IN_PROGRESS
      */
     public AgentResult run(String ticketId) {
         if (ticketId == null || ticketId.isBlank()) {
@@ -67,6 +68,7 @@ public class TicketAgentService {
 
         for (int iteration = 0; iteration < maxSteps; iteration++) {
             AgentDecision decision = planner.decide(ticketId, List.copyOf(steps));
+            validateDecision(decision);
 
             switch (decision.action()) {
                 case CHECK_STATUS -> {
@@ -93,5 +95,16 @@ public class TicketAgentService {
                 List.copyOf(steps),
                 false
         );
+    }
+
+    private void validateDecision(AgentDecision decision) {
+        if (decision == null || decision.action() == null) {
+            throw new IllegalStateException("Agent planner returned an invalid decision");
+        }
+
+        if (decision.action() == Action.FINISH
+                && (decision.finalAnswer() == null || decision.finalAnswer().isBlank())) {
+            throw new IllegalStateException("FINISH requires a nonblank final answer");
+        }
     }
 }

@@ -43,7 +43,8 @@ class KnowledgeQueryRewriterTests {
                     "Route knowledge questions.",
                     REWRITER_PROMPT,
                     "Summarize the conversation.",
-                    "Conversation summary: {{summary}}"
+                    "Conversation summary: {{summary}}",
+                    "Plan ticket analysis."
             ),
             new TokenBudgetService(),
             new AiContextProperties(2_000, 8_000)
@@ -125,7 +126,8 @@ class KnowledgeQueryRewriterTests {
                         "Route knowledge questions.",
                         REWRITER_PROMPT,
                         "Summarize the conversation.",
-                        "Conversation summary: {{summary}}"
+                        "Conversation summary: {{summary}}",
+                        "Plan ticket analysis."
                 ),
                 new TokenBudgetService(),
                 new AiContextProperties(1, 8_000)

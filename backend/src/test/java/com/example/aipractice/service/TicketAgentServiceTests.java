@@ -24,7 +24,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class TicketAgentServiceTests {
 
     private final TicketService ticketService = new TicketService();
-    private final TicketTools ticketTools = new TicketTools(ticketService);
+    private final TicketTools ticketTools = spy(new TicketTools(ticketService));
     private final TicketPriorityTools priorityTools = spy(new TicketPriorityTools(ticketService));
 
     @Test
@@ -153,7 +153,7 @@ class TicketAgentServiceTests {
 
     @Test
     void usesTheLatestStatusWhenEnforcingPriorityAccess() {
-        TicketTools changingStatusTools = spy(ticketTools);
+        TicketTools changingStatusTools = spy(new TicketTools(ticketService));
         doReturn("OPEN", "RESOLVED").when(changingStatusTools).getTicketStatus("INC-1001");
         TicketAgentService agent = new TicketAgentService(
                 changingStatusTools,
@@ -197,6 +197,38 @@ class TicketAgentServiceTests {
                     .isThrownBy(() -> agent(attentionPlanner(), maxSteps))
                     .withMessage("maxSteps must be greater than zero");
         }
+    }
+
+    @Test
+    void rejectsNullPlannerDecisionsWithoutExecutingTools() {
+        AgentPlanner planner = (ticketId, steps) -> null;
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> agent(planner, 3).run("INC-1001"))
+                .withMessage("Agent planner returned an invalid decision");
+        verifyNoInteractions(ticketTools, priorityTools);
+    }
+
+    @Test
+    void rejectsDecisionsWithoutAnActionWithoutExecutingTools() {
+        AgentPlanner planner = (ticketId, steps) -> new AgentDecision(null, null);
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> agent(planner, 3).run("INC-1001"))
+                .withMessage("Agent planner returned an invalid decision");
+        verifyNoInteractions(ticketTools, priorityTools);
+    }
+
+    @Test
+    void rejectsFinishWithoutANonblankAnswerWithoutExecutingTools() {
+        for (String finalAnswer : new String[] {null, "", " \t\n"}) {
+            AgentPlanner planner = (ticketId, steps) -> new AgentDecision(Action.FINISH, finalAnswer);
+
+            assertThatIllegalStateException()
+                    .isThrownBy(() -> agent(planner, 3).run("INC-1001"))
+                    .withMessage("FINISH requires a nonblank final answer");
+        }
+        verifyNoInteractions(ticketTools, priorityTools);
     }
 
     private TicketAgentService agent(AgentPlanner planner, int maxSteps) {

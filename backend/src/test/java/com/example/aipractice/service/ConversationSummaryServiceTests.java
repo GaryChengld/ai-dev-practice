@@ -49,7 +49,8 @@ class ConversationSummaryServiceTests {
                             "Route knowledge questions.",
                             "Rewrite knowledge questions.",
                             SUMMARY_PROMPT,
-                            "Conversation summary: {{summary}}"
+                            "Conversation summary: {{summary}}",
+                            "Plan ticket analysis."
                     )
             );
 

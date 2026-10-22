@@ -57,7 +57,8 @@ class AiChatServiceTests {
             "Route knowledge questions.",
             "Rewrite knowledge questions.",
             "Summarize the conversation.",
-            CHAT_SUMMARY_TEMPLATE
+            CHAT_SUMMARY_TEMPLATE,
+            "Plan ticket analysis."
     );
     private final TicketService ticketService = new TicketService();
     private final KnowledgeService knowledgeService = mock(KnowledgeService.class);

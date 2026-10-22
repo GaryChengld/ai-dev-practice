@@ -9,6 +9,7 @@ package com.example.aipractice.config;
  * @param knowledgeQueryRewriter system instruction for knowledge query rewriting
  * @param conversationSummarizer system instruction for rolling conversation summaries
  * @param chatSummary template that adds a conversation summary to the chat system prompt
+ * @param ticketAgentPlanner system instruction for ticket-agent planning
  */
 public record AiPrompts(
         String chatAssistant,
@@ -16,6 +17,7 @@ public record AiPrompts(
         String knowledgeCategoryRouter,
         String knowledgeQueryRewriter,
         String conversationSummarizer,
-        String chatSummary
+        String chatSummary,
+        String ticketAgentPlanner
 ) {
 }

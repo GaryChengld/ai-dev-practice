@@ -53,7 +53,8 @@ public class AiConfiguration {
                 loadPrompt(properties.knowledgeCategoryRouter()),
                 loadPrompt(properties.knowledgeQueryRewriter()),
                 loadPrompt(properties.conversationSummarizer()),
-                loadPrompt(properties.chatSummary())
+                loadPrompt(properties.chatSummary()),
+                loadPrompt(properties.ticketAgentPlanner())
         );
     }
 

@@ -37,7 +37,8 @@ class TicketAnalysisServiceTests {
             "Route knowledge questions.",
             "Rewrite knowledge questions.",
             "Summarize the conversation.",
-            "Conversation summary: {{summary}}"
+            "Conversation summary: {{summary}}",
+            "Plan ticket analysis."
     );
     private final TicketAnalysisService service = new TicketAnalysisService(
             ChatClient.create(chatModel),
