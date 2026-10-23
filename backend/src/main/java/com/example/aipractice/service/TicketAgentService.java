@@ -2,6 +2,7 @@ package com.example.aipractice.service;
 
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +19,7 @@ public class TicketAgentService {
         FINISH
     }
 
-    public record AgentDecision(Action action, String finalAnswer) {}
+    public record AgentDecision(Action action, @Schema(nullable = true) String finalAnswer) {}
 
     public record AgentStep(Action action, String result) {}
 

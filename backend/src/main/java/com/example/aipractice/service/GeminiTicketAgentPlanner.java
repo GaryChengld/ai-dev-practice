@@ -39,6 +39,6 @@ public class GeminiTicketAgentPlanner implements AgentPlanner {
                 .system(prompts.ticketAgentPlanner())
                 .user(userPrompt)
                 .call()
-                .entity(AgentDecision.class);
+                .entity(AgentDecision.class, spec -> spec.validateSchema());
     }
 }

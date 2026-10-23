@@ -24,7 +24,10 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -159,6 +162,47 @@ class GeminiTicketAgentPlannerTests {
                 .isThrownBy(() -> agent.run("INC-1001"))
                 .withMessage("Priority requires a previous status check returning OPEN or IN_PROGRESS");
         verifyNoInteractions(ticketTools, priorityTools);
+    }
+
+    @Test
+    void recoversFromInvalidStructuredDecision() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                modelResponse("""
+                        {
+                          "action": "CHECK_URGENCY",
+                          "finalAnswer": null
+                        }
+                        """),
+                modelResponse("""
+                        {
+                          "action": "CHECK_STATUS",
+                          "finalAnswer": null
+                        }
+                        """)
+        );
+
+        AgentDecision decision = planner.decide("INC-1001", List.of());
+
+        assertThat(decision.action()).isEqualTo(Action.CHECK_STATUS);
+        assertThat(decision.finalAnswer()).isNull();
+        verify(chatModel, times(2)).call(any(Prompt.class));
+    }
+
+    @Test
+    void failsWhenStructuredOutputCannotBeCorrected() {
+        when(chatModel.call(any(Prompt.class))).thenReturn(modelResponse("""
+                {
+                  "action": "INVALID_ACTION",
+                  "finalAnswer": null
+                }
+                """));
+
+        assertThatThrownBy(() -> planner.decide("INC-1001", List.of()))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(chatModel, atLeast(2)).call(any(Prompt.class));
+        // One initial request plus at most three default correction attempts.
+        verify(chatModel, atMost(4)).call(any(Prompt.class));
     }
 
     private void assertNoRegisteredTools(Prompt prompt) {
