@@ -5,6 +5,7 @@ import com.example.aipractice.service.TicketAgentService.AgentDecision;
 import com.example.aipractice.service.TicketAgentService.AgentPlanner;
 import com.example.aipractice.service.TicketAgentService.AgentResult;
 import com.example.aipractice.service.TicketAgentService.AgentStep;
+import com.example.aipractice.service.TicketAgentService.AgentStatus;
 import com.example.aipractice.tools.TicketPriorityTools;
 import com.example.aipractice.tools.TicketTools;
 import org.junit.jupiter.api.Test;
@@ -17,9 +18,13 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 class TicketAgentServiceTests {
 
@@ -32,6 +37,7 @@ class TicketAgentServiceTests {
         AgentResult result = agent(attentionPlanner(), 3).run("INC-1001");
 
         assertThat(result.completed()).isTrue();
+        assertThat(result.status()).isEqualTo(AgentStatus.COMPLETED);
         assertThat(result.answer()).isEqualTo("Ticket requires immediate attention");
         assertThat(result.steps()).containsExactly(
                 new AgentStep(Action.CHECK_STATUS, "OPEN"),
@@ -50,12 +56,91 @@ class TicketAgentServiceTests {
         AgentResult result = agent(planner, 2).run("INC-1001");
 
         assertThat(result.completed()).isFalse();
+        assertThat(result.status()).isEqualTo(AgentStatus.STEP_LIMIT_REACHED);
         assertThat(result.answer()).isEqualTo("Agent stopped: maximum step count reached");
         assertThat(result.steps()).containsExactly(
                 new AgentStep(Action.CHECK_STATUS, "OPEN"),
                 new AgentStep(Action.CHECK_STATUS, "OPEN")
         );
         assertThat(observedSteps).hasSize(2);
+    }
+
+    @Test
+    void returnsPlannerErrorWhenPlanningFails() {
+        AgentPlanner failingPlanner = (ticketId, steps) -> {
+            throw new IllegalStateException("Malformed model response");
+        };
+
+        AgentResult result = agent(failingPlanner, 3).run("INC-1001");
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.status()).isEqualTo(AgentStatus.PLANNER_ERROR);
+        assertThat(result.answer()).isEqualTo("Unable to complete ticket analysis");
+        assertThat(result.steps()).isEmpty();
+        verifyNoInteractions(ticketTools, priorityTools);
+    }
+
+    @Test
+    void preservesSuccessfulStepsWhenLaterPlanningFails() {
+        AgentPlanner failingPlanner = (ticketId, steps) -> {
+            if (steps.isEmpty()) {
+                return new AgentDecision(Action.CHECK_STATUS, null);
+            }
+            throw new IllegalStateException("Model service unavailable");
+        };
+
+        AgentResult result = agent(failingPlanner, 3).run("INC-1001");
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.status()).isEqualTo(AgentStatus.PLANNER_ERROR);
+        assertThat(result.answer()).isEqualTo("Unable to complete ticket analysis");
+        assertThat(result.steps()).containsExactly(new AgentStep(Action.CHECK_STATUS, "OPEN"));
+        assertThatThrownBy(() -> result.steps().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+        verify(ticketTools).getTicketStatus("INC-1001");
+        verifyNoMoreInteractions(ticketTools);
+        verifyNoInteractions(priorityTools);
+    }
+
+    @Test
+    void returnsToolErrorWhenStatusLookupFails() {
+        TicketTools failingTools = mock(TicketTools.class);
+        when(failingTools.getTicketStatus("INC-1001"))
+                .thenThrow(new IllegalStateException("Ticket service unavailable"));
+        TicketAgentService agent = new TicketAgentService(
+                failingTools,
+                priorityTools,
+                (ticketId, steps) -> new AgentDecision(Action.CHECK_STATUS, null),
+                3
+        );
+
+        AgentResult result = agent.run("INC-1001");
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.status()).isEqualTo(AgentStatus.TOOL_ERROR);
+        assertThat(result.answer()).isEqualTo("Unable to retrieve ticket status");
+        assertThat(result.steps()).isEmpty();
+        verify(failingTools).getTicketStatus("INC-1001");
+        verifyNoMoreInteractions(failingTools);
+        verifyNoInteractions(priorityTools);
+    }
+
+    @Test
+    void preservesSuccessfulStatusWhenPriorityLookupFails() {
+        doThrow(new IllegalStateException("Ticket service unavailable"))
+                .when(priorityTools).getTicketPriority("INC-1001");
+
+        AgentResult result = agent(attentionPlanner(), 3).run("INC-1001");
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.status()).isEqualTo(AgentStatus.TOOL_ERROR);
+        assertThat(result.answer()).isEqualTo("Unable to retrieve ticket priority");
+        assertThat(result.steps()).containsExactly(new AgentStep(Action.CHECK_STATUS, "OPEN"));
+        assertThatThrownBy(() -> result.steps().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+        verify(ticketTools).getTicketStatus("INC-1001");
+        verify(priorityTools).getTicketPriority("INC-1001");
+        verifyNoMoreInteractions(ticketTools, priorityTools);
     }
 
     @Test

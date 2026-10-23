@@ -19,11 +19,23 @@ public class TicketAgentService {
         FINISH
     }
 
+    public enum AgentStatus {
+        COMPLETED,
+        STEP_LIMIT_REACHED,
+        PLANNER_ERROR,
+        TOOL_ERROR
+    }
+
     public record AgentDecision(Action action, @Schema(nullable = true) String finalAnswer) {}
 
     public record AgentStep(Action action, String result) {}
 
-    public record AgentResult(String answer, List<AgentStep> steps, boolean completed) {}
+    public record AgentResult(String answer, List<AgentStep> steps, boolean completed, AgentStatus status) {
+        public AgentResult(String answer, List<AgentStep> steps, boolean completed) {
+            this(answer, steps, completed,
+                    completed ? AgentStatus.COMPLETED : AgentStatus.STEP_LIMIT_REACHED);
+        }
+    }
 
     @FunctionalInterface
     public interface AgentPlanner {
@@ -52,7 +64,8 @@ public class TicketAgentService {
 
     /**
      * Runs at most {@code maxSteps} planning decisions, including FINISH.
-     * Only tool executions appear in the immutable result trace.
+     * Only successful tool executions appear in the immutable result trace.
+     * Planner and tool failures return a classified result with previously completed steps.
      *
      * @throws IllegalArgumentException when the ticket ID is null or blank
      * @throws IllegalStateException when the planner returns an invalid decision,
@@ -68,12 +81,31 @@ public class TicketAgentService {
         String latestStatus = null;
 
         for (int iteration = 0; iteration < maxSteps; iteration++) {
-            AgentDecision decision = planner.decide(ticketId, List.copyOf(steps));
+            AgentDecision decision;
+            try {
+                decision = planner.decide(ticketId, List.copyOf(steps));
+            } catch (RuntimeException ex) {
+                return new AgentResult(
+                        "Unable to complete ticket analysis",
+                        List.copyOf(steps),
+                        false,
+                        AgentStatus.PLANNER_ERROR
+                );
+            }
             validateDecision(decision);
 
             switch (decision.action()) {
                 case CHECK_STATUS -> {
-                    latestStatus = ticketTools.getTicketStatus(ticketId);
+                    try {
+                        latestStatus = ticketTools.getTicketStatus(ticketId);
+                    } catch (RuntimeException ex) {
+                        return new AgentResult(
+                                "Unable to retrieve ticket status",
+                                List.copyOf(steps),
+                                false,
+                                AgentStatus.TOOL_ERROR
+                        );
+                    }
                     steps.add(new AgentStep(Action.CHECK_STATUS, latestStatus));
                 }
                 case CHECK_PRIORITY -> {
@@ -82,7 +114,17 @@ public class TicketAgentService {
                                 "Priority requires a previous status check returning OPEN or IN_PROGRESS"
                         );
                     }
-                    String priority = priorityTools.getTicketPriority(ticketId);
+                    String priority;
+                    try {
+                        priority = priorityTools.getTicketPriority(ticketId);
+                    } catch (RuntimeException ex) {
+                        return new AgentResult(
+                                "Unable to retrieve ticket priority",
+                                List.copyOf(steps),
+                                false,
+                                AgentStatus.TOOL_ERROR
+                        );
+                    }
                     steps.add(new AgentStep(Action.CHECK_PRIORITY, priority));
                 }
                 case FINISH -> {
