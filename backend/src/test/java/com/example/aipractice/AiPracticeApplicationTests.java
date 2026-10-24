@@ -3,6 +3,9 @@ package com.example.aipractice;
 import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
+import com.example.aipractice.controller.TicketAgentController;
+import com.example.aipractice.service.GeminiTicketAgentPlanner;
+import com.example.aipractice.service.TicketAgentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -32,10 +35,22 @@ class AiPracticeApplicationTests {
     @Autowired
     private EmbeddingModel embeddingModel;
 
+    @Autowired
+    private TicketAgentService.AgentPlanner ticketAgentPlanner;
+
+    @Autowired
+    private TicketAgentService ticketAgentService;
+
+    @Autowired
+    private TicketAgentController ticketAgentController;
+
     @Test
     void contextLoads() {
         assertThat(embeddingModel).isNotNull();
         assertThat(vectorStore).isNotNull();
+        assertThat(ticketAgentPlanner).isInstanceOf(GeminiTicketAgentPlanner.class);
+        assertThat(ticketAgentService).isNotNull();
+        assertThat(ticketAgentController).isNotNull();
     }
 
     @Test
