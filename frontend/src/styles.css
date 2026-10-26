@@ -19,6 +19,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -27,6 +28,7 @@ textarea {
   min-height: 100vh;
   display: grid;
   place-items: center;
+  gap: 28px;
   padding: 48px 20px;
   background:
     radial-gradient(circle at 12% 8%, rgba(74, 113, 255, 0.13), transparent 30%),
@@ -83,10 +85,9 @@ h1 {
   font-weight: 750;
 }
 
-textarea {
+textarea,
+.agent-card input {
   width: 100%;
-  resize: vertical;
-  min-height: 168px;
   padding: 18px 20px;
   border: 1px solid #ced5e1;
   border-radius: 16px;
@@ -97,17 +98,25 @@ textarea {
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-textarea::placeholder {
+textarea {
+  resize: vertical;
+  min-height: 168px;
+}
+
+textarea::placeholder,
+.agent-card input::placeholder {
   color: #98a2b3;
 }
 
-textarea:focus {
+textarea:focus,
+.agent-card input:focus {
   border-color: #6681e9;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(71, 103, 223, 0.12);
 }
 
-textarea:disabled {
+textarea:disabled,
+.agent-card input:disabled {
   cursor: wait;
   opacity: 0.72;
 }
@@ -318,6 +327,77 @@ textarea:disabled {
   margin: 0;
   color: #4b5565;
   line-height: 1.65;
+}
+
+.agent-card > .card-header h2 {
+  margin: 9px 0 12px;
+  color: #111827;
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.agent-result {
+  display: grid;
+  gap: 24px;
+  overflow-wrap: anywhere;
+}
+
+.agent-result .result-heading {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-result .result-heading h3 {
+  margin: 0;
+  color: #344054;
+  font-size: 1.2rem;
+}
+
+.agent-status {
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.agent-status-success {
+  color: #246b4f;
+  background: #ddf7eb;
+}
+
+.agent-status-warning {
+  color: #825d12;
+  background: #fff4ce;
+}
+
+.agent-status-error {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.agent-steps {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+  padding-left: 24px;
+  color: #4b5565;
+}
+
+.agent-steps li {
+  padding-left: 5px;
+  line-height: 1.6;
+}
+
+.agent-steps strong,
+.agent-steps span {
+  display: block;
+}
+
+.agent-steps strong {
+  color: #344054;
+  font-size: 0.85rem;
 }
 
 @keyframes spin {

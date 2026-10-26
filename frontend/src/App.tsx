@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { analyzeTicket } from "./api/ticketApi";
+import TicketAgentPanel from "./components/TicketAgentPanel";
 import type { Priority, TicketAnalysis } from "./types/TicketAnalysis";
 
 type AnalysisState =
@@ -124,6 +125,7 @@ function App() {
           )}
         </div>
       </section>
+      <TicketAgentPanel />
     </main>
   );
 }

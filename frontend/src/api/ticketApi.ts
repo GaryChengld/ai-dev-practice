@@ -1,4 +1,5 @@
 import type { TicketAnalysis } from "../types/TicketAnalysis";
+import type { AgentAnalysis } from "../types/AgentAnalysis";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -21,6 +22,25 @@ export async function analyzeTicket(message: string): Promise<TicketAnalysis> {
   }
 
   return (await response.json()) as TicketAnalysis;
+}
+
+export async function analyzeTicketWithAgent(
+  ticketId: string
+): Promise<AgentAnalysis> {
+  const response = await fetch(`${API_BASE_URL}/api/agents/tickets/analyze`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ticketId }),
+  });
+
+  if (!response.ok) {
+    const error = await readError(response);
+    throw new Error(error ?? `Request failed with status ${response.status}.`);
+  }
+
+  return (await response.json()) as AgentAnalysis;
 }
 
 async function readError(response: Response): Promise<string | undefined> {
