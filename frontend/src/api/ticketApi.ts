@@ -25,7 +25,8 @@ export async function analyzeTicket(message: string): Promise<TicketAnalysis> {
 }
 
 export async function analyzeTicketWithAgent(
-  ticketId: string
+  ticketId: string,
+  signal?: AbortSignal
 ): Promise<AgentAnalysis> {
   const response = await fetch(`${API_BASE_URL}/api/agents/tickets/analyze`, {
     method: "POST",
@@ -33,6 +34,7 @@ export async function analyzeTicketWithAgent(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ ticketId }),
+    signal,
   });
 
   if (!response.ok) {

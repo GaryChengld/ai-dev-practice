@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { analyzeTicketWithAgent } from "../api/ticketApi";
 import type { AgentAnalysis, AgentStatus } from "../types/AgentAnalysis";
@@ -22,11 +22,21 @@ const statusPresentation: Record<
 function TicketAgentPanel() {
   const [ticketId, setTicketId] = useState("");
   const [state, setState] = useState<AgentUiState>({ phase: "idle" });
+  const activeRequest = useRef<AbortController | null>(null);
   const isLoading = state.phase === "loading";
+
+  useEffect(() => {
+    return () => {
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+    };
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isLoading) return;
+
+    activeRequest.current?.abort();
+    activeRequest.current = null;
 
     const trimmedTicketId = ticketId.trim();
     if (!trimmedTicketId) {
@@ -34,11 +44,19 @@ function TicketAgentPanel() {
       return;
     }
 
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setState({ phase: "loading" });
     try {
-      const data = await analyzeTicketWithAgent(trimmedTicketId);
+      const data = await analyzeTicketWithAgent(trimmedTicketId, controller.signal);
+      if (activeRequest.current !== controller || controller.signal.aborted) {
+        return;
+      }
       setState({ phase: "success", data });
     } catch (error) {
+      if (activeRequest.current !== controller || controller.signal.aborted) {
+        return;
+      }
       setState({
         phase: "error",
         message:
@@ -46,6 +64,10 @@ function TicketAgentPanel() {
             ? error.message
             : "Unable to reach the ticket agent. Please try again.",
       });
+    } finally {
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+      }
     }
   };
 
@@ -73,17 +95,16 @@ function TicketAgentPanel() {
           }}
           placeholder="INC-1001"
           required
-          disabled={isLoading}
           aria-describedby="agent-ticket-hint"
         />
         <div className="form-footer">
           <span id="agent-ticket-hint">Use a ticket ID, such as INC-1001.</span>
         </div>
-        <button type="submit" disabled={isLoading}>
+        <button type="submit">
           {isLoading ? (
             <>
               <span className="spinner" aria-hidden="true" />
-              Running agent...
+              Run AI Agent again
             </>
           ) : (
             "Run AI Agent"
