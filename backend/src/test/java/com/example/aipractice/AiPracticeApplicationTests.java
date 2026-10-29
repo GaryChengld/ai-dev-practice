@@ -4,13 +4,16 @@ import com.example.aipractice.config.AiContextProperties;
 import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.controller.TicketAgentController;
+import com.example.aipractice.controller.TicketAgentStreamController;
 import com.example.aipractice.service.GeminiTicketAgentPlanner;
 import com.example.aipractice.service.TicketAgentService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,6 +47,13 @@ class AiPracticeApplicationTests {
     @Autowired
     private TicketAgentController ticketAgentController;
 
+    @Autowired
+    private TicketAgentStreamController ticketAgentStreamController;
+
+    @Autowired
+    @Qualifier("agentStreamExecutor")
+    private ThreadPoolTaskExecutor agentStreamExecutor;
+
     @Test
     void contextLoads() {
         assertThat(embeddingModel).isNotNull();
@@ -51,6 +61,10 @@ class AiPracticeApplicationTests {
         assertThat(ticketAgentPlanner).isInstanceOf(GeminiTicketAgentPlanner.class);
         assertThat(ticketAgentService).isNotNull();
         assertThat(ticketAgentController).isNotNull();
+        assertThat(ticketAgentStreamController).isNotNull();
+        assertThat(agentStreamExecutor.getCorePoolSize()).isEqualTo(2);
+        assertThat(agentStreamExecutor.getMaxPoolSize()).isEqualTo(4);
+        assertThat(agentStreamExecutor.getQueueCapacity()).isEqualTo(16);
     }
 
     @Test
