@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Executes planner decisions with bounded tool access, independently of the chat pipeline.
@@ -73,9 +74,20 @@ public class TicketAgentService {
      *         OPEN or IN_PROGRESS
      */
     public AgentResult run(String ticketId) {
+        return run(ticketId, step -> {});
+    }
+
+    /**
+     * Reports each successful tool execution synchronously after recording it in history.
+     * The callback is trusted code and must not throw; callback failures are not tool failures.
+     *
+     * @throws NullPointerException when the progress callback is null
+     */
+    public AgentResult run(String ticketId, Consumer<AgentStep> onStep) {
         if (ticketId == null || ticketId.isBlank()) {
             throw new IllegalArgumentException("ticketId cannot be null or blank");
         }
+        Objects.requireNonNull(onStep, "onStep cannot be null");
 
         List<AgentStep> steps = new ArrayList<>();
         String latestStatus = null;
@@ -106,7 +118,9 @@ public class TicketAgentService {
                                 AgentStatus.TOOL_ERROR
                         );
                     }
-                    steps.add(new AgentStep(Action.CHECK_STATUS, latestStatus));
+                    AgentStep step = new AgentStep(Action.CHECK_STATUS, latestStatus);
+                    steps.add(step);
+                    onStep.accept(step);
                 }
                 case CHECK_PRIORITY -> {
                     if (!"OPEN".equals(latestStatus) && !"IN_PROGRESS".equals(latestStatus)) {
@@ -125,7 +139,9 @@ public class TicketAgentService {
                                 AgentStatus.TOOL_ERROR
                         );
                     }
-                    steps.add(new AgentStep(Action.CHECK_PRIORITY, priority));
+                    AgentStep step = new AgentStep(Action.CHECK_PRIORITY, priority);
+                    steps.add(step);
+                    onStep.accept(step);
                 }
                 case FINISH -> {
                     return new AgentResult(decision.finalAnswer(), List.copyOf(steps), true);

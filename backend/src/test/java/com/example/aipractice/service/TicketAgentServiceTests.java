@@ -33,6 +33,96 @@ class TicketAgentServiceTests {
     private final TicketPriorityTools priorityTools = spy(new TicketPriorityTools(ticketService));
 
     @Test
+    void emitsProgressForEachSuccessfulToolExecution() {
+        List<AgentStep> events = new ArrayList<>();
+
+        AgentResult result = agent(attentionPlanner(), 3).run("INC-1001", events::add);
+
+        assertThat(events).containsExactly(
+                new AgentStep(Action.CHECK_STATUS, "OPEN"),
+                new AgentStep(Action.CHECK_PRIORITY, "HIGH")
+        );
+        assertThat(result.steps()).containsExactlyElementsOf(events);
+        assertThat(result.status()).isEqualTo(AgentStatus.COMPLETED);
+        assertThatThrownBy(() -> result.steps().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void emitsOnlySuccessfulProgressWhenPriorityLookupFails() {
+        List<AgentStep> events = new ArrayList<>();
+        doThrow(new IllegalStateException("Ticket service unavailable"))
+                .when(priorityTools).getTicketPriority("INC-1001");
+
+        AgentResult result = agent(attentionPlanner(), 3).run("INC-1001", events::add);
+
+        assertThat(events).containsExactly(new AgentStep(Action.CHECK_STATUS, "OPEN"));
+        assertThat(result.steps()).containsExactlyElementsOf(events);
+        assertThat(result.status()).isEqualTo(AgentStatus.TOOL_ERROR);
+        assertThat(result.completed()).isFalse();
+    }
+
+    @Test
+    void emitsNoProgressWhenPlanningFailsBeforeToolExecution() {
+        List<AgentStep> events = new ArrayList<>();
+        AgentPlanner failingPlanner = (ticketId, steps) -> {
+            throw new IllegalStateException("Malformed model response");
+        };
+
+        AgentResult result = agent(failingPlanner, 3).run("INC-1001", events::add);
+
+        assertThat(events).isEmpty();
+        assertThat(result.steps()).isEmpty();
+        assertThat(result.status()).isEqualTo(AgentStatus.PLANNER_ERROR);
+        assertThat(result.completed()).isFalse();
+        verifyNoInteractions(ticketTools, priorityTools);
+    }
+
+    @Test
+    void preservesEmittedProgressWhenLaterPlanningFails() {
+        List<AgentStep> events = new ArrayList<>();
+        AgentPlanner failingPlanner = (ticketId, steps) -> {
+            if (steps.isEmpty()) {
+                return new AgentDecision(Action.CHECK_STATUS, null);
+            }
+            throw new IllegalStateException("Model service unavailable");
+        };
+
+        AgentResult result = agent(failingPlanner, 3).run("INC-1001", events::add);
+
+        assertThat(events).containsExactly(new AgentStep(Action.CHECK_STATUS, "OPEN"));
+        assertThat(result.steps()).containsExactlyElementsOf(events);
+        assertThat(result.status()).isEqualTo(AgentStatus.PLANNER_ERROR);
+        assertThat(result.completed()).isFalse();
+        verifyNoInteractions(priorityTools);
+    }
+
+    @Test
+    void deliversProgressBeforeTheNextPlanningDecision() {
+        List<AgentStep> events = new ArrayList<>();
+        AgentPlanner planner = (ticketId, steps) -> {
+            assertThat(events).containsExactlyElementsOf(steps);
+            return attentionPlanner().decide(ticketId, steps);
+        };
+
+        AgentResult result = agent(planner, 3).run("INC-1001", events::add);
+
+        assertThat(result.status()).isEqualTo(AgentStatus.COMPLETED);
+        assertThat(events).hasSize(2);
+    }
+
+    @Test
+    void rejectsNullProgressCallbacksBeforePlanning() {
+        AgentPlanner planner = mock(AgentPlanner.class);
+
+        assertThatThrownBy(() -> agent(planner, 3).run("INC-1001", null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("onStep cannot be null");
+
+        verifyNoInteractions(planner, ticketTools, priorityTools);
+    }
+
+    @Test
     void completesMultiStepExecutionUsingPreviousResults() {
         AgentResult result = agent(attentionPlanner(), 3).run("INC-1001");
 
