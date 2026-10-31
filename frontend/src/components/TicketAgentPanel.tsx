@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { analyzeTicketWithAgent } from "../api/ticketApi";
-import type { AgentAnalysis, AgentStatus } from "../types/AgentAnalysis";
+import { streamTicketAgent } from "../api/ticketApi";
+import type { AgentAnalysis, AgentStatus, AgentStep } from "../types/AgentAnalysis";
 
 type AgentUiState =
   | { phase: "idle" }
-  | { phase: "loading" }
+  | { phase: "loading"; steps: AgentStep[] }
   | { phase: "success"; data: AgentAnalysis }
   | { phase: "error"; message: string };
 
@@ -46,9 +46,23 @@ function TicketAgentPanel() {
 
     const controller = new AbortController();
     activeRequest.current = controller;
-    setState({ phase: "loading" });
+    setState({ phase: "loading", steps: [] });
     try {
-      const data = await analyzeTicketWithAgent(trimmedTicketId, controller.signal);
+      const data = await streamTicketAgent(trimmedTicketId, controller.signal, (step) => {
+        if (activeRequest.current !== controller || controller.signal.aborted) {
+          return;
+        }
+        setState((current) => {
+          if (
+            activeRequest.current !== controller ||
+            controller.signal.aborted ||
+            current.phase !== "loading"
+          ) {
+            return current;
+          }
+          return { phase: "loading", steps: [...current.steps, step] };
+        });
+      });
       if (activeRequest.current !== controller || controller.signal.aborted) {
         return;
       }
@@ -117,7 +131,10 @@ function TicketAgentPanel() {
           <div className="empty-state">The agent's results will appear here.</div>
         )}
         {state.phase === "loading" && (
-          <div className="empty-state">Analyzing the ticket. Please wait.</div>
+          <div className="loading-state">
+            <div className="empty-state">Analyzing the ticket. Please wait.</div>
+            <AgentHistory steps={state.steps} />
+          </div>
         )}
         {state.phase === "error" && (
           <div className="error-state" role="alert">
@@ -147,27 +164,32 @@ function AgentResult({ analysis }: { analysis: AgentAnalysis }) {
           <h3>Answer</h3>
           <p>{analysis.answer}</p>
         </section>
-        <section>
-          <h3>Execution history</h3>
-          <p>
-            {analysis.steps.length} successful tool execution
-            {analysis.steps.length === 1 ? "" : "s"}
-          </p>
-          {analysis.steps.length > 0 ? (
-            <ol className="agent-steps">
-              {analysis.steps.map((step, index) => (
-                <li key={index}>
-                  <strong>{step.action}</strong>
-                  <span>{step.result}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p>No tools completed.</p>
-          )}
-        </section>
+        <AgentHistory steps={analysis.steps} />
       </div>
     </article>
+  );
+}
+
+function AgentHistory({ steps }: { steps: AgentStep[] }) {
+  return (
+    <section>
+      <h3>Execution history</h3>
+      <p>
+        {steps.length} successful tool execution{steps.length === 1 ? "" : "s"}
+      </p>
+      {steps.length > 0 ? (
+        <ol className="agent-steps">
+          {steps.map((step, index) => (
+            <li key={index}>
+              <strong>{step.action}</strong>
+              <span>{step.result}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p>No tools completed.</p>
+      )}
+    </section>
   );
 }
 

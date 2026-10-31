@@ -3,11 +3,11 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import TicketAgentPanel from "./TicketAgentPanel";
-import { analyzeTicketWithAgent } from "../api/ticketApi";
+import { streamTicketAgent } from "../api/ticketApi";
 import type { AgentAnalysis } from "../types/AgentAnalysis";
 
 vi.mock("../api/ticketApi", () => ({
-  analyzeTicketWithAgent: vi.fn(),
+  streamTicketAgent: vi.fn(),
 }));
 
 function deferred<T>() {
@@ -30,7 +30,7 @@ describe("TicketAgentPanel", () => {
   });
 
   it("displays a completed agent analysis", async () => {
-    vi.mocked(analyzeTicketWithAgent).mockResolvedValue({
+    vi.mocked(streamTicketAgent).mockResolvedValue({
       answer: "Ticket requires immediate attention",
       completed: true,
       status: "COMPLETED",
@@ -49,8 +49,8 @@ describe("TicketAgentPanel", () => {
     );
     await user.click(screen.getByRole("button", { name: /run ai agent/i }));
 
-    expect(analyzeTicketWithAgent).toHaveBeenCalledExactlyOnceWith(
-      "INC-1001", expect.any(AbortSignal)
+    expect(streamTicketAgent).toHaveBeenCalledExactlyOnceWith(
+      "INC-1001", expect.any(AbortSignal), expect.any(Function)
     );
     expect(
       await screen.findByText("Ticket requires immediate attention")
@@ -67,7 +67,7 @@ describe("TicketAgentPanel", () => {
   });
 
   it("displays tool failure with completed execution history", async () => {
-    vi.mocked(analyzeTicketWithAgent).mockResolvedValue({
+    vi.mocked(streamTicketAgent).mockResolvedValue({
       answer: "Unable to retrieve ticket priority",
       completed: false,
       status: "TOOL_ERROR",
@@ -83,8 +83,8 @@ describe("TicketAgentPanel", () => {
     );
     await user.click(screen.getByRole("button", { name: /run ai agent/i }));
 
-    expect(analyzeTicketWithAgent).toHaveBeenCalledExactlyOnceWith(
-      "INC-1001", expect.any(AbortSignal)
+    expect(streamTicketAgent).toHaveBeenCalledExactlyOnceWith(
+      "INC-1001", expect.any(AbortSignal), expect.any(Function)
     );
     expect(
       await screen.findByText("Unable to retrieve ticket priority")
@@ -104,7 +104,7 @@ describe("TicketAgentPanel", () => {
   });
 
   it("displays an error when the API request fails", async () => {
-    vi.mocked(analyzeTicketWithAgent).mockRejectedValue(
+    vi.mocked(streamTicketAgent).mockRejectedValue(
       new Error("Service unavailable")
     );
 
@@ -120,8 +120,8 @@ describe("TicketAgentPanel", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Unable to run the agent");
     expect(alert).toHaveTextContent("Service unavailable");
-    expect(analyzeTicketWithAgent).toHaveBeenCalledExactlyOnceWith(
-      "INC-1001", expect.any(AbortSignal)
+    expect(streamTicketAgent).toHaveBeenCalledExactlyOnceWith(
+      "INC-1001", expect.any(AbortSignal), expect.any(Function)
     );
     expect(
       screen.queryByRole("heading", { name: "Execution history" })
@@ -140,13 +140,93 @@ describe("TicketAgentPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Please enter a ticket ID."
     );
-    expect(analyzeTicketWithAgent).not.toHaveBeenCalled();
+    expect(streamTicketAgent).not.toHaveBeenCalled();
+  });
+
+  it("displays each completed tool while the stream is pending", async () => {
+    const pending = deferred<AgentAnalysis>();
+    vi.mocked(streamTicketAgent).mockReturnValueOnce(pending.promise);
+    const user = userEvent.setup();
+    render(<TicketAgentPanel />);
+    await user.type(screen.getByRole("textbox", { name: /ticket id/i }), "INC-1001");
+    await user.click(screen.getByRole("button", { name: /run ai agent/i }));
+    const onStep = vi.mocked(streamTicketAgent).mock.calls[0][2];
+
+    act(() => onStep({ action: "CHECK_STATUS", result: "OPEN" }));
+    expect(screen.getByText("OPEN")).toBeInTheDocument();
+    expect(screen.getByText("1 successful tool execution")).toBeInTheDocument();
+    expect(screen.getByText("Analyzing the ticket. Please wait.")).toBeInTheDocument();
+    expect(screen.queryByText("Status: COMPLETED")).not.toBeInTheDocument();
+
+    act(() => onStep({ action: "CHECK_PRIORITY", result: "HIGH" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("HIGH")).toBeInTheDocument();
+
+    await act(async () => {
+      pending.resolve({
+        ...completedAnalysis("Analysis finished"),
+        steps: [
+          { action: "CHECK_STATUS", result: "OPEN" },
+          { action: "CHECK_PRIORITY", result: "HIGH" },
+        ],
+      });
+    });
+    expect(screen.getByText("Analysis finished")).toBeInTheDocument();
+    expect(screen.getByText("Status: COMPLETED")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText("Analyzing the ticket. Please wait.")).not.toBeInTheDocument();
+  });
+
+  it("ignores obsolete stream progress while showing only the newest ticket", async () => {
+    const first = deferred<AgentAnalysis>();
+    const second = deferred<AgentAnalysis>();
+    vi.mocked(streamTicketAgent)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const user = userEvent.setup();
+    render(<TicketAgentPanel />);
+    const input = screen.getByRole("textbox", { name: /ticket id/i });
+    const submit = screen.getByRole("button", { name: /run ai agent/i });
+    await user.type(input, "INC-1001");
+    await user.click(submit);
+    const [, firstSignal, oldStep] = vi.mocked(streamTicketAgent).mock.calls[0];
+    act(() => oldStep({ action: "CHECK_STATUS", result: "Old progress" }));
+    expect(screen.getByText("Old progress")).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "INC-1002");
+    await user.click(submit);
+    const newStep = vi.mocked(streamTicketAgent).mock.calls[1][2];
+    expect(firstSignal.aborted).toBe(true);
+    expect(screen.queryByText("Old progress")).not.toBeInTheDocument();
+    act(() => {
+      oldStep({ action: "CHECK_PRIORITY", result: "Late obsolete progress" });
+      newStep({ action: "CHECK_STATUS", result: "New progress" });
+    });
+    await act(async () => {
+      first.resolve(completedAnalysis("Obsolete completion"));
+    });
+    expect(screen.queryByText("Late obsolete progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Obsolete completion")).not.toBeInTheDocument();
+    expect(screen.getByText("New progress")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    await act(async () => {
+      second.resolve({
+        ...completedAnalysis("Newest analysis finished"),
+        steps: [{ action: "CHECK_STATUS", result: "New progress" }],
+      });
+    });
+    act(() => oldStep({ action: "CHECK_PRIORITY", result: "Even later progress" }));
+    expect(screen.getByText("Newest analysis finished")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.queryByText("Even later progress")).not.toBeInTheDocument();
   });
 
   it("keeps the newest result when an older request finishes last", async () => {
     const first = deferred<AgentAnalysis>();
     const second = deferred<AgentAnalysis>();
-    vi.mocked(analyzeTicketWithAgent)
+    vi.mocked(streamTicketAgent)
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
 
@@ -157,7 +237,7 @@ describe("TicketAgentPanel", () => {
 
     await user.type(input, "INC-1001");
     await user.click(submit);
-    const firstSignal = vi.mocked(analyzeTicketWithAgent).mock.calls[0][1]!;
+    const firstSignal = vi.mocked(streamTicketAgent).mock.calls[0][1];
     expect(firstSignal.aborted).toBe(false);
     expect(input).toBeEnabled();
     expect(submit).toBeEnabled();
@@ -166,12 +246,12 @@ describe("TicketAgentPanel", () => {
     await user.type(input, "INC-1002");
     await user.click(submit);
 
-    expect(analyzeTicketWithAgent).toHaveBeenCalledTimes(2);
-    expect(analyzeTicketWithAgent).toHaveBeenNthCalledWith(
-      2, "INC-1002", expect.any(AbortSignal)
+    expect(streamTicketAgent).toHaveBeenCalledTimes(2);
+    expect(streamTicketAgent).toHaveBeenNthCalledWith(
+      2, "INC-1002", expect.any(AbortSignal), expect.any(Function)
     );
     expect(firstSignal.aborted).toBe(true);
-    expect(vi.mocked(analyzeTicketWithAgent).mock.calls[1][1]!.aborted).toBe(false);
+    expect(vi.mocked(streamTicketAgent).mock.calls[1][1].aborted).toBe(false);
 
     await act(async () => {
       second.resolve(completedAnalysis("INC-1002 is the latest result"));
@@ -188,7 +268,7 @@ describe("TicketAgentPanel", () => {
   it("ignores an obsolete request error while the newest request is pending", async () => {
     const first = deferred<AgentAnalysis>();
     const second = deferred<AgentAnalysis>();
-    vi.mocked(analyzeTicketWithAgent)
+    vi.mocked(streamTicketAgent)
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
 
@@ -216,7 +296,7 @@ describe("TicketAgentPanel", () => {
 
   it("cancels a pending request before displaying a blank ticket validation error", async () => {
     const pending = deferred<AgentAnalysis>();
-    vi.mocked(analyzeTicketWithAgent).mockReturnValueOnce(pending.promise);
+    vi.mocked(streamTicketAgent).mockReturnValueOnce(pending.promise);
 
     const user = userEvent.setup();
     render(<TicketAgentPanel />);
@@ -224,13 +304,13 @@ describe("TicketAgentPanel", () => {
     const submit = screen.getByRole("button", { name: /run ai agent/i });
     await user.type(input, "INC-1001");
     await user.click(submit);
-    const signal = vi.mocked(analyzeTicketWithAgent).mock.calls[0][1]!;
+    const signal = vi.mocked(streamTicketAgent).mock.calls[0][1];
     await user.clear(input);
     await user.type(input, "   ");
     await user.click(submit);
 
     expect(signal.aborted).toBe(true);
-    expect(analyzeTicketWithAgent).toHaveBeenCalledTimes(1);
+    expect(streamTicketAgent).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert")).toHaveTextContent("Please enter a ticket ID.");
 
     await act(async () => {
@@ -242,13 +322,13 @@ describe("TicketAgentPanel", () => {
 
   it("aborts the active request when unmounted", async () => {
     const pending = deferred<AgentAnalysis>();
-    vi.mocked(analyzeTicketWithAgent).mockReturnValueOnce(pending.promise);
+    vi.mocked(streamTicketAgent).mockReturnValueOnce(pending.promise);
 
     const user = userEvent.setup();
     const { unmount } = render(<TicketAgentPanel />);
     await user.type(screen.getByRole("textbox", { name: /ticket id/i }), "INC-1001");
     await user.click(screen.getByRole("button", { name: /run ai agent/i }));
-    const signal = vi.mocked(analyzeTicketWithAgent).mock.calls[0][1]!;
+    const signal = vi.mocked(streamTicketAgent).mock.calls[0][1];
     expect(signal.aborted).toBe(false);
 
     unmount();
