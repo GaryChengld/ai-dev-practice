@@ -118,6 +118,37 @@ type AgentEvent =
   | { name: "step"; data: AgentStep }
   | { name: "complete"; data: AgentAnalysis };
 
+function isAgentStep(value: unknown): value is AgentStep {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const step = value as Record<string, unknown>;
+  return (
+    (step.action === "CHECK_STATUS" || step.action === "CHECK_PRIORITY") &&
+    typeof step.result === "string"
+  );
+}
+
+function isAgentAnalysis(value: unknown): value is AgentAnalysis {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const analysis = value as Record<string, unknown>;
+  return (
+    typeof analysis.answer === "string" &&
+    typeof analysis.completed === "boolean" &&
+    (analysis.status === "COMPLETED" ||
+      analysis.status === "STEP_LIMIT_REACHED" ||
+      analysis.status === "PLANNER_ERROR" ||
+      analysis.status === "TOOL_ERROR") &&
+    analysis.completed === (analysis.status === "COMPLETED") &&
+    Array.isArray(analysis.steps) &&
+    analysis.steps.every(isAgentStep)
+  );
+}
+
 function parseAgentEvent(frame: string): AgentEvent | undefined {
   let name = "";
   const data: string[] = [];
@@ -131,12 +162,19 @@ function parseAgentEvent(frame: string): AgentEvent | undefined {
   }
 
   // Ignore comments, keep-alives, and events outside the agent contract.
-  if (data.length === 0) return;
   if (name === "step") {
-    return { name, data: JSON.parse(data.join("\n")) as AgentStep };
+    const payload: unknown = data.length === 0 ? undefined : JSON.parse(data.join("\n"));
+    if (!isAgentStep(payload)) {
+      throw new Error("Invalid agent step event.");
+    }
+    return { name, data: payload };
   }
   if (name === "complete") {
-    return { name, data: JSON.parse(data.join("\n")) as AgentAnalysis };
+    const payload: unknown = data.length === 0 ? undefined : JSON.parse(data.join("\n"));
+    if (!isAgentAnalysis(payload)) {
+      throw new Error("Invalid agent complete event.");
+    }
+    return { name, data: payload };
   }
 }
 
