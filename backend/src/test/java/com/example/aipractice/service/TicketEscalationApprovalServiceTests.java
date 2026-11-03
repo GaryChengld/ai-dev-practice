@@ -1,5 +1,6 @@
 package com.example.aipractice.service;
 
+import com.example.aipractice.exception.ProposalNotPendingException;
 import com.example.aipractice.service.TicketAgentService.Action;
 import com.example.aipractice.service.TicketAgentService.AgentResult;
 import com.example.aipractice.service.TicketAgentService.AgentStatus;
@@ -18,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -189,10 +189,10 @@ class TicketEscalationApprovalServiceTests {
     }
 
     private void assertNoLongerPending(UUID id) {
-        assertThatIllegalStateException().isThrownBy(() -> service.approve(id))
-                .withMessage("Proposal is no longer pending");
-        assertThatIllegalStateException().isThrownBy(() -> service.reject(id))
-                .withMessage("Proposal is no longer pending");
+        assertThatThrownBy(() -> service.approve(id)).isInstanceOf(ProposalNotPendingException.class)
+                .hasMessage("Proposal is no longer pending");
+        assertThatThrownBy(() -> service.reject(id)).isInstanceOf(ProposalNotPendingException.class)
+                .hasMessage("Proposal is no longer pending");
     }
 
     private boolean approveAfterStart(UUID id, CountDownLatch ready, CountDownLatch start)
@@ -204,7 +204,7 @@ class TicketEscalationApprovalServiceTests {
         try {
             service.approve(id);
             return true;
-        } catch (IllegalStateException ex) {
+        } catch (ProposalNotPendingException ex) {
             assertThat(ex).hasMessage("Proposal is no longer pending");
             return false;
         }

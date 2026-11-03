@@ -1,5 +1,6 @@
 package com.example.aipractice.service;
 
+import com.example.aipractice.exception.ProposalNotPendingException;
 import com.example.aipractice.service.TicketAgentService.Action;
 import com.example.aipractice.service.TicketAgentService.AgentResult;
 import com.example.aipractice.service.TicketAgentService.AgentStatus;
@@ -77,7 +78,7 @@ public class TicketEscalationApprovalService {
         Objects.requireNonNull(proposalId, "proposalId cannot be null");
         EscalationProposal proposal = pending.remove(proposalId);
         if (proposal == null) {
-            throw new IllegalStateException("Proposal is no longer pending");
+            throw new ProposalNotPendingException();
         }
         return proposal;
     }
