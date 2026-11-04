@@ -5,6 +5,7 @@ import com.example.aipractice.config.AiPromptProperties;
 import com.example.aipractice.config.AiPrompts;
 import com.example.aipractice.controller.TicketAgentController;
 import com.example.aipractice.controller.TicketAgentStreamController;
+import com.example.aipractice.service.ApprovalAuthorizer;
 import com.example.aipractice.service.GeminiTicketAgentPlanner;
 import com.example.aipractice.service.TicketAgentService;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,10 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.SecurityFilterChain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -53,6 +57,16 @@ class AiPracticeApplicationTests {
     @Autowired
     @Qualifier("agentStreamExecutor")
     private ThreadPoolTaskExecutor agentStreamExecutor;
+
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Test
+    void approvalSecurityIsNotEnabledOutsideTheDemoProfile() {
+        assertThat(applicationContext.getBeansOfType(SecurityFilterChain.class)).isEmpty();
+        assertThat(applicationContext.getBeansOfType(UserDetailsService.class)).isEmpty();
+        assertThat(applicationContext.getBeansOfType(ApprovalAuthorizer.class)).isEmpty();
+    }
 
     @Test
     void contextLoads() {

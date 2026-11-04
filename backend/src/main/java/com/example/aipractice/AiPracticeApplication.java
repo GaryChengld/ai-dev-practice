@@ -3,11 +3,17 @@ package com.example.aipractice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 
 /**
  * Entry point for the AI practice Spring Boot application.
  */
-@SpringBootApplication
+// Web security is explicitly enabled by the approval-demo configuration only.
+@SpringBootApplication(exclude = {
+        ServletWebSecurityAutoConfiguration.class,
+        UserDetailsServiceAutoConfiguration.class
+})
 @ConfigurationPropertiesScan
 public class AiPracticeApplication {
 

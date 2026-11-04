@@ -208,6 +208,27 @@ An unknown conversation ID returns HTTP 404. A final prompt whose essential
 context exceeds the configured budget returns HTTP 422 with code
 `CONTEXT_BUDGET_EXCEEDED` without appending a partial conversation turn.
 
+## Approval Demo Security
+
+The escalation-proposal controller and its Spring Security filter chain are
+enabled only under `approval-demo`. Proposal creation requires `TICKET_REVIEW`;
+approval and rejection require `TICKET_ESCALATE`. The controller also checks the
+trusted Spring Security context before consuming a proposal. Other existing
+chat and agent endpoints retain their current access behavior.
+
+The demo uses HTTP Basic with CSRF protection retained for browser/session
+requests. POST requests require a valid CSRF token as well as authentication.
+No user accounts, real escalation gateway, or approval-service bean are
+provisioned: tests supply authenticated identities and mock services. Interactive
+use still requires a verified user store, gateway wiring, and frontend
+authentication/CSRF integration; enabling the profile alone does not supply them.
+
+Run the focused security tests without Gemini:
+
+```powershell
+mvn -pl backend -Dtest=TicketEscalationSecurityTests,SpringSecurityApprovalAuthorizerTests test
+```
+
 ## Knowledge Base
 
 The backend discovers Markdown files under

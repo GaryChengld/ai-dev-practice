@@ -24,8 +24,8 @@ import java.security.Principal;
 import java.util.UUID;
 
 /**
- * Development-only HTTP boundary. The profile is not authentication: an authorizer
- * and approval service with an appropriate gateway must be supplied separately.
+ * Development-only HTTP boundary secured by ApprovalSecurityConfiguration.
+ * The approval service and gateway must still be supplied separately.
  */
 @RestController
 @RequestMapping("/api/agents/tickets/escalation-proposals")
