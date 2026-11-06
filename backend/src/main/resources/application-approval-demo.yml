@@ -1,0 +1,5 @@
+ai:
+  approval:
+    jwt:
+      issuer-uri: ${APPROVAL_JWT_ISSUER_URI}
+      audience: ${APPROVAL_JWT_AUDIENCE}

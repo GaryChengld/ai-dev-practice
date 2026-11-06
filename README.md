@@ -216,18 +216,31 @@ approval and rejection require `TICKET_ESCALATE`. The controller also checks the
 trusted Spring Security context before consuming a proposal. Other existing
 chat and agent endpoints retain their current access behavior.
 
-The demo uses HTTP Basic with CSRF protection retained for browser/session
-requests. POST requests require a valid CSRF token as well as authentication.
-No user accounts, real escalation gateway, or approval-service bean are
-provisioned: tests supply authenticated identities and mock services. Interactive
-use still requires a verified user store, gateway wiring, and frontend
-authentication/CSRF integration; enabling the profile alone does not supply them.
+The demo accepts OAuth2 JWT bearer tokens. Configure `APPROVAL_JWT_ISSUER_URI`
+with your trusted identity provider's HTTPS issuer URL and `APPROVAL_JWT_AUDIENCE`
+with this API's audience. Public signing keys are discovered from that issuer;
+signature, issuer, audience, expiration and not-before claims are validated.
+Tokens must include an expiration. Verified `scope` (or `scp`) values map
+`ticket.review` to `TICKET_REVIEW` and `ticket.escalate` to `TICKET_ESCALATE`;
+unrelated scopes grant no application permissions.
+
+Only the approval API filter chain disables CSRF: it is stateless, does not
+create or authenticate through sessions, and has no Basic or cookie-based login
+fallback. Clients must send `Authorization: Bearer <access-token>` explicitly.
+No real escalation gateway or approval-service bean is provisioned. Interactive
+use still requires gateway wiring and frontend identity-provider integration;
+enabling the profile alone does not supply them.
 
 Run the focused security tests without Gemini:
 
 ```powershell
-mvn -pl backend -Dtest=TicketEscalationSecurityTests,SpringSecurityApprovalAuthorizerTests test
+mvn -pl backend -Dtest=TicketEscalationJwtSecurityTests,ApprovalJwtDecoderTests,SpringSecurityApprovalAuthorizerTests test
 ```
+
+MockMvc JWT helpers test permissions using the production scope converter but
+bypass cryptographic verification. Separate decoder tests generate RSA keys and
+serve issuer metadata/public keys on loopback, verifying rejection of invalid
+signatures, issuer, audience, expiry, and unsigned tokens without an external IdP.
 
 ## Knowledge Base
 
